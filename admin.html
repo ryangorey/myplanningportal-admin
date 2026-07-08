@@ -93,6 +93,20 @@
           <label>Notes</label>
           <textarea id="edit-notes"></textarea>
         </div>
+        <div class="full">
+          <label>Payment options offered to the customer</label>
+          <div style="display:flex;gap:16px;margin-bottom:14px;">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="edit-allow-full" style="width:auto;margin:0;"> Full balance
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="edit-allow-retainer" style="width:auto;margin:0;"> 50% retainer
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="edit-allow-custom" style="width:auto;margin:0;"> Custom amount
+            </label>
+          </div>
+        </div>
       </div>
       <div style="display:flex;gap:10px;">
         <button class="btn-primary" id="save-booking-btn">Save changes</button>
@@ -359,6 +373,9 @@
     document.getElementById("edit-total").value = b.package_total || 0;
     document.getElementById("edit-deposit").value = b.deposit_paid || 0;
     document.getElementById("edit-notes").value = b.notes || "";
+    document.getElementById("edit-allow-full").checked = !!b.allow_full_payment;
+    document.getElementById("edit-allow-retainer").checked = !!b.allow_retainer_payment;
+    document.getElementById("edit-allow-custom").checked = !!b.allow_custom_payment;
 
     document.getElementById("booking-detail").classList.add("open");
     document.getElementById("booking-detail").scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -384,7 +401,10 @@
           event_date: document.getElementById("edit-date").value,
           package_total: Number(document.getElementById("edit-total").value) || 0,
           deposit_paid: Number(document.getElementById("edit-deposit").value) || 0,
-          notes: document.getElementById("edit-notes").value
+          notes: document.getElementById("edit-notes").value,
+          allow_full_payment: document.getElementById("edit-allow-full").checked ? 1 : 0,
+          allow_retainer_payment: document.getElementById("edit-allow-retainer").checked ? 1 : 0,
+          allow_custom_payment: document.getElementById("edit-allow-custom").checked ? 1 : 0
         })
       });
       document.getElementById("booking-detail").classList.remove("open");
