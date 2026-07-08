@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin | myplanningportal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="admin-styles.css">
+</head>
+<body>
+
+<div class="admin-topbar">
+  <img src="https://raw.githubusercontent.com/ryangorey/RGMLlogo/102e74830a7fd89dca2451699469c742463da962/my_planning_portal_logo_dark_bg_small.png" alt="myplanningportal">
+  <div class="who">
+    <span id="who-name"></span>
+    <span class="role-badge" id="who-role"></span>
+    <button id="logout-btn">Sign out</button>
+  </div>
+</div>
+
+<div class="admin-tabs">
+  <button class="admin-tab active" data-tab="bookings">Bookings</button>
+  <button class="admin-tab" data-tab="equipment">Equipment</button>
+  <button class="admin-tab" data-tab="packages">Packages</button>
+</div>
+
+<div class="admin-content">
+
+  <!-- ============================== Bookings ============================== -->
+  <div class="admin-panel active" id="panel-bookings">
+    <h1>Bookings</h1>
+    <p class="section-sub">Every inquiry and booking across all three brands.</p>
+
+    <div class="filter-bar">
+      <div>
+        <label for="f-date">Date</label>
+        <input type="date" id="f-date">
+      </div>
+      <div>
+        <label for="f-brand">Brand</label>
+        <select id="f-brand"><option value="">All brands</option></select>
+      </div>
+      <div>
+        <label for="f-status">Status</label>
+        <select id="f-status">
+          <option value="">All statuses</option>
+          <option value="inquiry">Inquiry</option>
+          <option value="booked">Booked</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+      <div><button class="btn-secondary" id="clear-filters">Clear</button></div>
+    </div>
+
+    <table class="admin-table" id="bookings-table">
+      <thead>
+        <tr>
+          <th>Date</th><th>Brand</th><th>Customer</th><th>Package</th>
+          <th>Status</th><th>Total</th><th>Deposit</th><th>Balance</th>
+        </tr>
+      </thead>
+      <tbody id="bookings-tbody"></tbody>
+    </table>
+
+    <div class="detail-panel" id="booking-detail">
+      <h3 id="detail-title" style="font-family:'Fraunces',serif;font-size:16px;font-weight:500;margin:0 0 14px;"></h3>
+      <div class="form-grid">
+        <div>
+          <label>Status</label>
+          <select id="edit-status">
+            <option value="inquiry">Inquiry</option>
+            <option value="booked">Booked</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div>
+          <label>Event date</label>
+          <input type="date" id="edit-date">
+        </div>
+        <div>
+          <label>Package total ($)</label>
+          <input type="number" step="0.01" id="edit-total">
+        </div>
+        <div>
+          <label>Deposit paid ($)</label>
+          <input type="number" step="0.01" id="edit-deposit">
+        </div>
+        <div class="full">
+          <label>Notes</label>
+          <textarea id="edit-notes"></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="save-booking-btn">Save changes</button>
+        <button class="btn-secondary" id="close-detail-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== Equipment ============================== -->
+  <div class="admin-panel" id="panel-equipment">
+    <h1>Equipment</h1>
+    <p class="section-sub">Every trackable item -- deactivating keeps history intact instead of deleting.</p>
+
+    <table class="admin-table">
+      <thead><tr><th>Name</th><th>Category</th><th>Notes</th><th>Status</th><th></th></tr></thead>
+      <tbody id="equipment-tbody"></tbody>
+    </table>
+
+    <div class="add-panel">
+      <h3>Add equipment</h3>
+      <div class="form-grid">
+        <div><label>Name</label><input type="text" id="eq-name" placeholder="e.g. Studio Booth #2"></div>
+        <div>
+          <label>Category</label>
+          <select id="eq-category">
+            <option value="dj_gear">DJ gear</option>
+            <option value="photo_booth">Photo booth</option>
+            <option value="backdrop">Backdrop</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="full"><label>Notes</label><input type="text" id="eq-notes" placeholder="optional"></div>
+      </div>
+      <button class="btn-primary" id="add-equipment-btn">Add equipment</button>
+    </div>
+  </div>
+
+  <!-- ============================== Packages ============================== -->
+  <div class="admin-panel" id="panel-packages">
+    <h1>Packages</h1>
+    <p class="section-sub">What's bookable and priced on each site.</p>
+
+    <table class="admin-table">
+      <thead><tr><th>Brand</th><th>Name</th><th>Category</th><th>Price</th><th>Hours</th><th>Status</th><th></th></tr></thead>
+      <tbody id="packages-tbody"></tbody>
+    </table>
+
+    <div class="add-panel">
+      <h3>Add package</h3>
+      <div class="form-grid">
+        <div>
+          <label>Brand</label>
+          <select id="pk-brand"><option value="">Any brand</option></select>
+        </div>
+        <div><label>Name</label><input type="text" id="pk-name" placeholder="e.g. Social Booth -- 2 Hour"></div>
+        <div><label>Category</label><input type="text" id="pk-category" placeholder="e.g. photo_booth"></div>
+        <div><label>Price ($)</label><input type="number" step="0.01" id="pk-price"></div>
+        <div><label>Duration (hours)</label><input type="number" step="0.5" id="pk-duration" placeholder="optional"></div>
+        <div class="full"><label>Description</label><textarea id="pk-description"></textarea></div>
+      </div>
+      <button class="btn-primary" id="add-package-btn">Add package</button>
+    </div>
+  </div>
+
+</div>
+
+<script src="admin-config.js"></script>
+<script>
+  // -------------------------------------------------------------------
+  // Auth / session
+  // -------------------------------------------------------------------
+  function getSession() {
+    try {
+      const raw = localStorage.getItem("mpp_staff_session");
+      return raw ? JSON.parse(raw) : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function clearSessionAndRedirect() {
+    localStorage.removeItem("mpp_staff_session");
+    window.location.replace("/admin-login.html");
+  }
+
+  const session = getSession();
+  if (!session || !session.token) {
+    clearSessionAndRedirect();
+  }
+
+  async function authFetch(path, options) {
+    options = options || {};
+    options.headers = Object.assign({}, options.headers, {
+      authorization: "Bearer " + session.token
+    });
+    const resp = await fetch(API_BASE_URL + path, options);
+    if (resp.status === 401) {
+      clearSessionAndRedirect();
+      throw new Error("Session expired");
+    }
+    return resp;
+  }
+
+  document.getElementById("who-name").textContent =
+    (session.staff.first_name ? session.staff.first_name + " " : "") + (session.staff.last_name || session.staff.email);
+  document.getElementById("who-role").textContent = session.staff.role;
+
+  document.getElementById("logout-btn").addEventListener("click", async function () {
+    try {
+      await authFetch("/api/auth/logout", { method: "POST" });
+    } catch (err) { /* already redirected on 401, or ignore network errors */ }
+    clearSessionAndRedirect();
+  });
+
+  // -------------------------------------------------------------------
+  // Tabs
+  // -------------------------------------------------------------------
+  document.querySelectorAll(".admin-tab").forEach(function (tab) {
+    tab.addEventListener("click", function () {
+      document.querySelectorAll(".admin-tab").forEach(function (t) { t.classList.remove("active"); });
+      document.querySelectorAll(".admin-panel").forEach(function (p) { p.classList.remove("active"); });
+      tab.classList.add("active");
+      document.getElementById("panel-" + tab.dataset.tab).classList.add("active");
+    });
+  });
+
+  // -------------------------------------------------------------------
+  // Brands (used by the bookings filter and the packages form)
+  // -------------------------------------------------------------------
+  let brandsCache = [];
+
+  async function loadBrands() {
+    const resp = await fetch(API_BASE_URL + "/api/brands");
+    brandsCache = await resp.json();
+
+    const filterSelect = document.getElementById("f-brand");
+    const pkSelect = document.getElementById("pk-brand");
+    brandsCache.forEach(function (b) {
+      const opt1 = document.createElement("option");
+      opt1.value = b.slug;
+      opt1.textContent = b.display_name;
+      filterSelect.appendChild(opt1);
+
+      const opt2 = document.createElement("option");
+      opt2.value = b.id;
+      opt2.textContent = b.display_name;
+      pkSelect.appendChild(opt2);
+    });
+  }
+
+  function brandNameForSlug(slug) {
+    const b = brandsCache.find(function (x) { return x.slug === slug; });
+    return b ? b.display_name : slug;
+  }
+
+  // -------------------------------------------------------------------
+  // Bookings
+  // -------------------------------------------------------------------
+  function money(n) {
+    return "$" + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  async function loadBookings() {
+    const params = new URLSearchParams();
+    const date = document.getElementById("f-date").value;
+    const brand = document.getElementById("f-brand").value;
+    const status = document.getElementById("f-status").value;
+    if (date) params.set("date", date);
+    if (brand) params.set("brand", brand);
+    if (status) params.set("status", status);
+
+    const resp = await authFetch("/api/bookings?" + params.toString());
+    const rows = await resp.json();
+
+    const tbody = document.getElementById("bookings-tbody");
+    if (!Array.isArray(rows) || rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">No bookings match these filters.</div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows.map(function (b) {
+      const balance = Math.max(0, (b.package_total || 0) - (b.deposit_paid || 0));
+      const customerName = (b.customer_first_name || b.customer_last_name)
+        ? ((b.customer_first_name || "") + " " + (b.customer_last_name || "")).trim()
+        : (b.customer_email || "--");
+      return (
+        '<tr class="row-clickable" data-id="' + b.id + '">' +
+          "<td>" + b.event_date + "</td>" +
+          "<td>" + (b.brand_name || "") + "</td>" +
+          "<td>" + customerName + "</td>" +
+          "<td>" + (b.package_name || "--") + "</td>" +
+          '<td><span class="status-pill ' + b.status + '">' + b.status + "</span></td>" +
+          "<td>" + money(b.package_total) + "</td>" +
+          "<td>" + money(b.deposit_paid) + "</td>" +
+          "<td>" + money(balance) + "</td>" +
+        "</tr>"
+      );
+    }).join("");
+
+    tbody.querySelectorAll("tr[data-id]").forEach(function (tr) {
+      tr.addEventListener("click", function () { openBookingDetail(tr.dataset.id); });
+    });
+  }
+
+  let openBookingId = null;
+
+  async function openBookingDetail(id) {
+    const resp = await authFetch("/api/bookings/" + id);
+    const b = await resp.json();
+    openBookingId = b.id;
+
+    document.getElementById("detail-title").textContent =
+      "#" + b.id + " -- " + (b.brand_name || "") + " -- " +
+      ((b.customer_first_name || "") + " " + (b.customer_last_name || "")).trim();
+    document.getElementById("edit-status").value = b.status;
+    document.getElementById("edit-date").value = b.event_date;
+    document.getElementById("edit-total").value = b.package_total || 0;
+    document.getElementById("edit-deposit").value = b.deposit_paid || 0;
+    document.getElementById("edit-notes").value = b.notes || "";
+
+    document.getElementById("booking-detail").classList.add("open");
+    document.getElementById("booking-detail").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  document.getElementById("close-detail-btn").addEventListener("click", function () {
+    document.getElementById("booking-detail").classList.remove("open");
+    openBookingId = null;
+  });
+
+  document.getElementById("save-booking-btn").addEventListener("click", async function () {
+    if (!openBookingId) return;
+    const btn = document.getElementById("save-booking-btn");
+    btn.disabled = true;
+    btn.textContent = "Saving...";
+
+    try {
+      await authFetch("/api/bookings/" + openBookingId, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          status: document.getElementById("edit-status").value,
+          event_date: document.getElementById("edit-date").value,
+          package_total: Number(document.getElementById("edit-total").value) || 0,
+          deposit_paid: Number(document.getElementById("edit-deposit").value) || 0,
+          notes: document.getElementById("edit-notes").value
+        })
+      });
+      document.getElementById("booking-detail").classList.remove("open");
+      openBookingId = null;
+      await loadBookings();
+    } catch (err) {
+      // authFetch already redirects on 401; other errors just leave the panel open to retry.
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Save changes";
+    }
+  });
+
+  ["f-date", "f-brand", "f-status"].forEach(function (id) {
+    document.getElementById(id).addEventListener("change", loadBookings);
+  });
+  document.getElementById("clear-filters").addEventListener("click", function () {
+    document.getElementById("f-date").value = "";
+    document.getElementById("f-brand").value = "";
+    document.getElementById("f-status").value = "";
+    loadBookings();
+  });
+
+  // -------------------------------------------------------------------
+  // Equipment
+  // -------------------------------------------------------------------
+  async function loadEquipment() {
+    const resp = await fetch(API_BASE_URL + "/api/equipment");
+    const rows = await resp.json();
+    const tbody = document.getElementById("equipment-tbody");
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No equipment yet.</div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows.map(function (e) {
+      return (
+        "<tr>" +
+          "<td>" + e.name + "</td>" +
+          "<td>" + e.category + "</td>" +
+          "<td>" + (e.notes || "--") + "</td>" +
+          "<td>" + (e.is_active ? "Active" : "Inactive") + "</td>" +
+          "<td>" + (e.is_active ? '<button class="btn-danger" data-deactivate-eq="' + e.id + '">Deactivate</button>' : "") + "</td>" +
+        "</tr>"
+      );
+    }).join("");
+
+    tbody.querySelectorAll("[data-deactivate-eq]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        await authFetch("/api/equipment/" + btn.dataset.deactivateEq, { method: "DELETE" });
+        loadEquipment();
+      });
+    });
+  }
+
+  document.getElementById("add-equipment-btn").addEventListener("click", async function () {
+    const name = document.getElementById("eq-name").value.trim();
+    const category = document.getElementById("eq-category").value;
+    const notes = document.getElementById("eq-notes").value.trim();
+    if (!name) return;
+
+    await authFetch("/api/equipment", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: name, category: category, notes: notes || null })
+    });
+
+    document.getElementById("eq-name").value = "";
+    document.getElementById("eq-notes").value = "";
+    loadEquipment();
+  });
+
+  // -------------------------------------------------------------------
+  // Packages
+  // -------------------------------------------------------------------
+  async function loadPackages() {
+    const resp = await fetch(API_BASE_URL + "/api/packages");
+    const rows = await resp.json();
+    const tbody = document.getElementById("packages-tbody");
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No packages yet.</div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows.map(function (p) {
+      return (
+        "<tr>" +
+          "<td>" + (p.brand_slug ? brandNameForSlug(p.brand_slug) : "Any") + "</td>" +
+          "<td>" + p.name + "</td>" +
+          "<td>" + (p.category || "--") + "</td>" +
+          "<td>" + money(p.price) + "</td>" +
+          "<td>" + (p.duration_hours || "--") + "</td>" +
+          "<td>" + (p.is_active ? "Active" : "Inactive") + "</td>" +
+          "<td>" + (p.is_active ? '<button class="btn-danger" data-deactivate-pk="' + p.id + '">Deactivate</button>' : "") + "</td>" +
+        "</tr>"
+      );
+    }).join("");
+
+    tbody.querySelectorAll("[data-deactivate-pk]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        await authFetch("/api/packages/" + btn.dataset.deactivatePk, { method: "DELETE" });
+        loadPackages();
+      });
+    });
+  }
+
+  document.getElementById("add-package-btn").addEventListener("click", async function () {
+    const name = document.getElementById("pk-name").value.trim();
+    const price = Number(document.getElementById("pk-price").value);
+    if (!name || !price) return;
+
+    const brandId = document.getElementById("pk-brand").value;
+    const duration = document.getElementById("pk-duration").value;
+
+    await authFetch("/api/packages", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        brand_id: brandId ? Number(brandId) : null,
+        name: name,
+        category: document.getElementById("pk-category").value.trim() || null,
+        price: price,
+        duration_hours: duration ? Number(duration) : null,
+        description: document.getElementById("pk-description").value.trim() || null
+      })
+    });
+
+    document.getElementById("pk-name").value = "";
+    document.getElementById("pk-category").value = "";
+    document.getElementById("pk-price").value = "";
+    document.getElementById("pk-duration").value = "";
+    document.getElementById("pk-description").value = "";
+    loadPackages();
+  });
+
+  // -------------------------------------------------------------------
+  // Boot
+  // -------------------------------------------------------------------
+  (async function init() {
+    await loadBrands();
+    await loadBookings();
+    await loadEquipment();
+    await loadPackages();
+  })();
+</script>
+
+</body>
+</html>

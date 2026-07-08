@@ -1,0 +1,10 @@
+# Deploy config for the staff admin static site (admin-login.html,
+# admin.html, admin-styles.css, admin-config.js). Its own Cloudflare
+# project, separate from the customer portal and the API backend --
+# rename this file to wrangler.toml in whatever repo holds these files.
+
+name = "myplanningportal-admin"
+compatibility_date = "2025-01-01"
+
+[assets]
+directory = "./"
