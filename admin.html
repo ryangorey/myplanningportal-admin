@@ -107,6 +107,27 @@
             </label>
           </div>
         </div>
+        <div>
+          <label>Booth type (Grin + Bear Booth only)</label>
+          <select id="edit-booth-type">
+            <option value="">Not set</option>
+            <option value="social">Social Booth</option>
+            <option value="studio">Studio Booth</option>
+          </select>
+        </div>
+        <div></div>
+        <div class="full">
+          <label>Backdrop / template selection offered to the customer</label>
+          <div style="display:flex;gap:16px;margin-bottom:14px;">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="edit-allow-backdrop" style="width:auto;margin:0;"> Backdrop picker
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="edit-allow-template" style="width:auto;margin:0;"> Template picker
+            </label>
+          </div>
+        </div>
+        <div class="full" id="detail-picks" style="font-size:13px;color:#3b5f2a;"></div>
       </div>
       <div style="display:flex;gap:10px;">
         <button class="btn-primary" id="save-booking-btn">Save changes</button>
@@ -376,6 +397,14 @@
     document.getElementById("edit-allow-full").checked = !!b.allow_full_payment;
     document.getElementById("edit-allow-retainer").checked = !!b.allow_retainer_payment;
     document.getElementById("edit-allow-custom").checked = !!b.allow_custom_payment;
+    document.getElementById("edit-booth-type").value = b.booth_type || "";
+    document.getElementById("edit-allow-backdrop").checked = !!b.allow_backdrop_selection;
+    document.getElementById("edit-allow-template").checked = !!b.allow_template_selection;
+
+    const picks = [];
+    if (b.backdrop_choice) picks.push("Backdrop picked: " + b.backdrop_choice);
+    if (b.template_choice) picks.push("Template picked: " + b.template_choice);
+    document.getElementById("detail-picks").textContent = picks.join(" -- ");
 
     document.getElementById("booking-detail").classList.add("open");
     document.getElementById("booking-detail").scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -404,7 +433,10 @@
           notes: document.getElementById("edit-notes").value,
           allow_full_payment: document.getElementById("edit-allow-full").checked ? 1 : 0,
           allow_retainer_payment: document.getElementById("edit-allow-retainer").checked ? 1 : 0,
-          allow_custom_payment: document.getElementById("edit-allow-custom").checked ? 1 : 0
+          allow_custom_payment: document.getElementById("edit-allow-custom").checked ? 1 : 0,
+          booth_type: document.getElementById("edit-booth-type").value || null,
+          allow_backdrop_selection: document.getElementById("edit-allow-backdrop").checked ? 1 : 0,
+          allow_template_selection: document.getElementById("edit-allow-template").checked ? 1 : 0
         })
       });
       document.getElementById("booking-detail").classList.remove("open");
