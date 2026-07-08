@@ -16,6 +16,14 @@
   <div class="who">
     <span id="who-name"></span>
     <span class="role-badge" id="who-role"></span>
+    <div class="settings-dropdown">
+      <button id="settings-toggle-btn">Settings <i class="ti" style="font-style:normal;">&#9662;</i></button>
+      <div class="dropdown-menu" id="settings-menu">
+        <button class="dropdown-item" data-tab="account">Account details</button>
+        <button class="dropdown-item" data-tab="clients">Clients</button>
+        <button class="dropdown-item" data-tab="venues">Venues</button>
+      </div>
+    </div>
     <button id="logout-btn">Sign out</button>
   </div>
 </div>
@@ -80,6 +88,14 @@
         <div>
           <label>Event date</label>
           <input type="date" id="edit-date">
+        </div>
+        <div>
+          <label>Package</label>
+          <select id="edit-package"><option value="">No package</option></select>
+        </div>
+        <div>
+          <label>Venue</label>
+          <select id="edit-venue"><option value="">No venue set</option></select>
         </div>
         <div>
           <label>Package total ($)</label>
@@ -151,7 +167,19 @@
           <label>Event type</label>
           <input type="text" id="bk-event-type" placeholder="e.g. wedding, corporate">
         </div>
-        <div></div>
+        <div>
+          <label>Package (optional)</label>
+          <select id="bk-package"><option value="">No package yet</option></select>
+        </div>
+        <div>
+          <label>Venue (optional)</label>
+          <select id="bk-venue"><option value="">No venue yet</option></select>
+        </div>
+        <div class="full">
+          <label>Search saved clients</label>
+          <input type="text" id="bk-client-search" placeholder="Type a name or email to autofill an existing client...">
+          <div id="bk-client-results" style="display:none;background:#fff;border:0.5px solid #d8d2c4;border-radius:6px;margin:-10px 0 14px;max-height:160px;overflow-y:auto;"></div>
+        </div>
         <div>
           <label>Customer email</label>
           <input type="email" id="bk-email" placeholder="name@email.com">
@@ -212,12 +240,12 @@
     <p class="section-sub">What's bookable and priced on each site.</p>
 
     <table class="admin-table">
-      <thead><tr><th>Brand</th><th>Name</th><th>Category</th><th>Price</th><th>Hours</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Brand</th><th>Name</th><th>Category</th><th>Price</th><th>Hours</th><th>Booth</th><th>Widgets</th><th>Status</th><th></th></tr></thead>
       <tbody id="packages-tbody"></tbody>
     </table>
 
     <div class="add-panel">
-      <h3>Add package</h3>
+      <h3 id="package-form-title">Add package</h3>
       <div class="form-grid">
         <div>
           <label>Brand</label>
@@ -227,9 +255,136 @@
         <div><label>Category</label><input type="text" id="pk-category" placeholder="e.g. photo_booth"></div>
         <div><label>Price ($)</label><input type="number" step="0.01" id="pk-price"></div>
         <div><label>Duration (hours)</label><input type="number" step="0.5" id="pk-duration" placeholder="optional"></div>
+        <div>
+          <label>Booth type</label>
+          <select id="pk-booth-type">
+            <option value="">Not set</option>
+            <option value="social">Social Booth</option>
+            <option value="studio">Studio Booth</option>
+          </select>
+        </div>
         <div class="full"><label>Description</label><textarea id="pk-description"></textarea></div>
+        <div class="full">
+          <label>Backdrop / template selection for bookings using this package</label>
+          <div style="display:flex;gap:16px;margin-bottom:14px;">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="pk-allow-backdrop" style="width:auto;margin:0;" checked> Backdrop picker
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="pk-allow-template" style="width:auto;margin:0;" checked> Template picker
+            </label>
+          </div>
+        </div>
       </div>
-      <button class="btn-primary" id="add-package-btn">Add package</button>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="add-package-btn">Add package</button>
+        <button class="btn-secondary" id="cancel-package-edit-btn" style="display:none;">Cancel edit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== Account details ============================== -->
+  <div class="admin-panel" id="panel-account">
+    <h1>Account details</h1>
+    <p class="section-sub">Your own name, email, and password.</p>
+
+    <div id="account-status" class="portal-status"></div>
+
+    <div class="add-panel">
+      <div class="form-grid">
+        <div><label>First name</label><input type="text" id="acct-first-name"></div>
+        <div><label>Last name</label><input type="text" id="acct-last-name"></div>
+        <div class="full"><label>Email</label><input type="email" id="acct-email"></div>
+      </div>
+      <button class="btn-primary" id="save-account-btn">Save details</button>
+    </div>
+
+    <div class="add-panel">
+      <h3>Change password</h3>
+      <div class="form-grid">
+        <div><label>Current password</label><input type="password" id="acct-current-password"></div>
+        <div></div>
+        <div><label>New password</label><input type="password" id="acct-new-password"></div>
+        <div><label>Confirm new password</label><input type="password" id="acct-confirm-password"></div>
+      </div>
+      <button class="btn-primary" id="save-password-btn">Change password</button>
+    </div>
+  </div>
+
+  <!-- ============================== Clients ============================== -->
+  <div class="admin-panel" id="panel-clients">
+    <h1>Clients</h1>
+    <p class="section-sub">Saved contact info you can reuse when starting a new booking.</p>
+
+    <div class="filter-bar">
+      <div style="flex:1;">
+        <label for="client-search">Search</label>
+        <input type="text" id="client-search" placeholder="Name, email, or phone">
+      </div>
+    </div>
+
+    <table class="admin-table">
+      <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th></th></tr></thead>
+      <tbody id="clients-tbody"></tbody>
+    </table>
+
+    <div class="detail-panel" id="client-detail">
+      <h3 id="client-detail-title" style="font-family:'Fraunces',serif;font-size:16px;font-weight:500;margin:0 0 14px;"></h3>
+      <div class="form-grid">
+        <div><label>First name</label><input type="text" id="edit-client-first-name"></div>
+        <div><label>Last name</label><input type="text" id="edit-client-last-name"></div>
+        <div><label>Email</label><input type="email" id="edit-client-email"></div>
+        <div><label>Phone</label><input type="text" id="edit-client-phone"></div>
+        <div class="full" id="client-bookings-list" style="font-size:13px;color:#6b6355;"></div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="save-client-btn">Save changes</button>
+        <button class="btn-secondary" id="close-client-detail-btn">Close</button>
+      </div>
+    </div>
+
+    <div class="add-panel">
+      <h3>Add client</h3>
+      <div id="add-client-status" class="portal-status"></div>
+      <div class="form-grid">
+        <div><label>First name</label><input type="text" id="new-client-first-name" placeholder="optional"></div>
+        <div><label>Last name</label><input type="text" id="new-client-last-name" placeholder="optional"></div>
+        <div><label>Email</label><input type="email" id="new-client-email"></div>
+        <div><label>Phone</label><input type="text" id="new-client-phone" placeholder="optional"></div>
+      </div>
+      <button class="btn-primary" id="add-client-btn">Add client</button>
+    </div>
+  </div>
+
+  <!-- ============================== Venues ============================== -->
+  <div class="admin-panel" id="panel-venues">
+    <h1>Venues</h1>
+    <p class="section-sub">Saved venue info you can reuse across bookings.</p>
+
+    <table class="admin-table">
+      <thead><tr><th>Name</th><th>City, state</th><th>Contact</th><th>Status</th><th></th></tr></thead>
+      <tbody id="venues-tbody"></tbody>
+    </table>
+
+    <div class="add-panel">
+      <h3 id="venue-form-title">Add venue</h3>
+      <div id="venue-form-status" class="portal-status"></div>
+      <div class="form-grid">
+        <div class="full"><label>Name</label><input type="text" id="vn-name" placeholder="e.g. The Grand Hall"></div>
+        <div class="full"><label>Address</label><input type="text" id="vn-address" placeholder="optional"></div>
+        <div><label>City</label><input type="text" id="vn-city" placeholder="optional"></div>
+        <div><label>State</label><input type="text" id="vn-state" placeholder="optional"></div>
+        <div><label>ZIP</label><input type="text" id="vn-zip" placeholder="optional"></div>
+        <div></div>
+        <div><label>Contact name</label><input type="text" id="vn-contact-name" placeholder="optional"></div>
+        <div><label>Contact phone</label><input type="text" id="vn-contact-phone" placeholder="optional"></div>
+        <div class="full"><label>Contact email</label><input type="email" id="vn-contact-email" placeholder="optional"></div>
+        <div class="full"><label>Notes</label><textarea id="vn-notes"></textarea></div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="add-venue-btn">Add venue</button>
+        <button class="btn-secondary" id="cancel-venue-edit-btn" style="display:none;">Cancel edit</button>
+      </div>
     </div>
   </div>
 
@@ -284,15 +439,111 @@
   });
 
   // -------------------------------------------------------------------
-  // Tabs
+  // Tabs + settings dropdown (both just switch which panel shows)
   // -------------------------------------------------------------------
+  function showPanel(name) {
+    document.querySelectorAll(".admin-tab").forEach(function (t) { t.classList.remove("active"); });
+    document.querySelectorAll(".admin-panel").forEach(function (p) { p.classList.remove("active"); });
+    const tabBtn = document.querySelector('.admin-tab[data-tab="' + name + '"]');
+    if (tabBtn) tabBtn.classList.add("active");
+    document.getElementById("panel-" + name).classList.add("active");
+  }
+
   document.querySelectorAll(".admin-tab").forEach(function (tab) {
-    tab.addEventListener("click", function () {
-      document.querySelectorAll(".admin-tab").forEach(function (t) { t.classList.remove("active"); });
-      document.querySelectorAll(".admin-panel").forEach(function (p) { p.classList.remove("active"); });
-      tab.classList.add("active");
-      document.getElementById("panel-" + tab.dataset.tab).classList.add("active");
+    tab.addEventListener("click", function () { showPanel(tab.dataset.tab); });
+  });
+
+  document.querySelectorAll(".dropdown-item").forEach(function (item) {
+    item.addEventListener("click", function () {
+      showPanel(item.dataset.tab);
+      document.getElementById("settings-menu").classList.remove("open");
     });
+  });
+
+  document.getElementById("settings-toggle-btn").addEventListener("click", function (e) {
+    e.stopPropagation();
+    document.getElementById("settings-menu").classList.toggle("open");
+  });
+  document.addEventListener("click", function () {
+    document.getElementById("settings-menu").classList.remove("open");
+  });
+
+  // -------------------------------------------------------------------
+  // Account details
+  // -------------------------------------------------------------------
+  function showAccountStatus(kind, message) {
+    const el = document.getElementById("account-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  async function loadAccount() {
+    const resp = await authFetch("/api/staff/me");
+    const me = await resp.json();
+    document.getElementById("acct-first-name").value = me.first_name || "";
+    document.getElementById("acct-last-name").value = me.last_name || "";
+    document.getElementById("acct-email").value = me.email || "";
+  }
+
+  document.getElementById("save-account-btn").addEventListener("click", async function () {
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/staff/me", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          first_name: document.getElementById("acct-first-name").value.trim(),
+          last_name: document.getElementById("acct-last-name").value.trim(),
+          email: document.getElementById("acct-email").value.trim()
+        })
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        showAccountStatus("error", (data && data.error) || "Couldn't save.");
+        return;
+      }
+      showAccountStatus("success", "Saved.");
+      document.getElementById("who-name").textContent =
+        (document.getElementById("acct-first-name").value ? document.getElementById("acct-first-name").value + " " : "") +
+        document.getElementById("acct-last-name").value;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("save-password-btn").addEventListener("click", async function () {
+    const current = document.getElementById("acct-current-password").value;
+    const next = document.getElementById("acct-new-password").value;
+    const confirmVal = document.getElementById("acct-confirm-password").value;
+    if (!current || !next) {
+      showAccountStatus("error", "Fill in both password fields.");
+      return;
+    }
+    if (next !== confirmVal) {
+      showAccountStatus("error", "New passwords don't match.");
+      return;
+    }
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/staff/me", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ current_password: current, new_password: next })
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        showAccountStatus("error", (data && data.error) || "Couldn't change password.");
+        return;
+      }
+      showAccountStatus("success", "Password changed.");
+      document.getElementById("acct-current-password").value = "";
+      document.getElementById("acct-new-password").value = "";
+      document.getElementById("acct-confirm-password").value = "";
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   // -------------------------------------------------------------------
@@ -328,6 +579,12 @@
   function brandNameForSlug(slug) {
     const b = brandsCache.find(function (x) { return x.slug === slug; });
     return b ? b.display_name : slug;
+  }
+
+  function boothTypeLabel(v) {
+    if (v === "social") return "Social";
+    if (v === "studio") return "Studio";
+    return "--";
   }
 
   // -------------------------------------------------------------------
@@ -391,6 +648,8 @@
       ((b.customer_first_name || "") + " " + (b.customer_last_name || "")).trim();
     document.getElementById("edit-status").value = b.status;
     document.getElementById("edit-date").value = b.event_date;
+    document.getElementById("edit-package").value = b.package_id || "";
+    document.getElementById("edit-venue").value = b.venue_id || "";
     document.getElementById("edit-total").value = b.package_total || 0;
     document.getElementById("edit-deposit").value = b.deposit_paid || 0;
     document.getElementById("edit-notes").value = b.notes || "";
@@ -415,6 +674,19 @@
     openBookingId = null;
   });
 
+  // Picking a package here is a shortcut, not a lock -- it fills in the
+  // package's price/booth type/widget defaults so staff can see them, but
+  // every field stays editable before Save.
+  document.getElementById("edit-package").addEventListener("change", function () {
+    const pkgId = Number(this.value);
+    const pkg = packagesCache.find(function (p) { return p.id === pkgId; });
+    if (!pkg) return;
+    document.getElementById("edit-total").value = pkg.price || 0;
+    document.getElementById("edit-booth-type").value = pkg.booth_type || "";
+    document.getElementById("edit-allow-backdrop").checked = !!pkg.allow_backdrop_selection;
+    document.getElementById("edit-allow-template").checked = !!pkg.allow_template_selection;
+  });
+
   document.getElementById("save-booking-btn").addEventListener("click", async function () {
     if (!openBookingId) return;
     const btn = document.getElementById("save-booking-btn");
@@ -428,6 +700,8 @@
         body: JSON.stringify({
           status: document.getElementById("edit-status").value,
           event_date: document.getElementById("edit-date").value,
+          package_id: document.getElementById("edit-package").value ? Number(document.getElementById("edit-package").value) : null,
+          venue_id: document.getElementById("edit-venue").value ? Number(document.getElementById("edit-venue").value) : null,
           package_total: Number(document.getElementById("edit-total").value) || 0,
           deposit_paid: Number(document.getElementById("edit-deposit").value) || 0,
           notes: document.getElementById("edit-notes").value,
@@ -488,6 +762,8 @@
           brand_slug: brandSlug,
           event_date: eventDate,
           event_type: document.getElementById("bk-event-type").value.trim() || null,
+          package_id: document.getElementById("bk-package").value ? Number(document.getElementById("bk-package").value) : null,
+          venue_id: document.getElementById("bk-venue").value ? Number(document.getElementById("bk-venue").value) : null,
           notes: document.getElementById("bk-notes").value.trim() || null,
           customer: {
             email: email,
@@ -507,6 +783,11 @@
       showNewBookingStatus("success", "Booking #" + data.id + " created as an inquiry. Click it in the table to price it or mark it booked.");
       document.getElementById("bk-date").value = "";
       document.getElementById("bk-event-type").value = "";
+      document.getElementById("bk-package").value = "";
+      document.getElementById("bk-venue").value = "";
+      document.getElementById("bk-client-search").value = "";
+      document.getElementById("bk-client-results").style.display = "none";
+      document.getElementById("bk-client-results").innerHTML = "";
       document.getElementById("bk-email").value = "";
       document.getElementById("bk-phone").value = "";
       document.getElementById("bk-first-name").value = "";
@@ -572,19 +853,234 @@
   });
 
   // -------------------------------------------------------------------
-  // Packages
+  // Clients
   // -------------------------------------------------------------------
-  async function loadPackages() {
-    const resp = await fetch(API_BASE_URL + "/api/packages");
-    const rows = await resp.json();
-    const tbody = document.getElementById("packages-tbody");
+  let clientsCache = [];
+  let openClientId = null;
 
-    if (!Array.isArray(rows) || rows.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No packages yet.</div></td></tr>';
+  function clientName(c) {
+    return ((c.first_name || "") + " " + (c.last_name || "")).trim();
+  }
+
+  function showClientFormStatus(kind, message) {
+    const el = document.getElementById("add-client-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  async function loadClients() {
+    const search = document.getElementById("client-search").value.trim();
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    const resp = await authFetch("/api/customers?" + params.toString());
+    const rows = await resp.json();
+    clientsCache = Array.isArray(rows) ? rows : [];
+
+    const tbody = document.getElementById("clients-tbody");
+    if (clientsCache.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state">No clients found.</div></td></tr>';
       return;
     }
 
-    tbody.innerHTML = rows.map(function (p) {
+    tbody.innerHTML = clientsCache.map(function (c) {
+      return (
+        '<tr class="row-clickable" data-id="' + c.id + '">' +
+          "<td>" + (clientName(c) || "--") + "</td>" +
+          "<td>" + (c.email || "--") + "</td>" +
+          "<td>" + (c.phone || "--") + "</td>" +
+          "<td></td>" +
+        "</tr>"
+      );
+    }).join("");
+
+    tbody.querySelectorAll("tr[data-id]").forEach(function (tr) {
+      tr.addEventListener("click", function () { openClientDetail(tr.dataset.id); });
+    });
+  }
+
+  let clientSearchTimer = null;
+  document.getElementById("client-search").addEventListener("input", function () {
+    clearTimeout(clientSearchTimer);
+    clientSearchTimer = setTimeout(loadClients, 300);
+  });
+
+  async function openClientDetail(id) {
+    const resp = await authFetch("/api/customers/" + id);
+    const c = await resp.json();
+    openClientId = c.id;
+
+    document.getElementById("client-detail-title").textContent = clientName(c) || c.email || ("Client #" + c.id);
+    document.getElementById("edit-client-first-name").value = c.first_name || "";
+    document.getElementById("edit-client-last-name").value = c.last_name || "";
+    document.getElementById("edit-client-email").value = c.email || "";
+    document.getElementById("edit-client-phone").value = c.phone || "";
+
+    const bookingsList = document.getElementById("client-bookings-list");
+    if (Array.isArray(c.bookings) && c.bookings.length) {
+      bookingsList.innerHTML = "<strong>Past bookings:</strong> " + c.bookings.map(function (b) {
+        return b.event_date + " -- " + (b.brand_name || "") + (b.package_name ? " (" + b.package_name + ")" : "") + " -- " + b.status;
+      }).join("; ");
+    } else {
+      bookingsList.textContent = "No bookings yet.";
+    }
+
+    document.getElementById("client-detail").classList.add("open");
+    document.getElementById("client-detail").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  document.getElementById("close-client-detail-btn").addEventListener("click", function () {
+    document.getElementById("client-detail").classList.remove("open");
+    openClientId = null;
+  });
+
+  document.getElementById("save-client-btn").addEventListener("click", async function () {
+    if (!openClientId) return;
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/customers/" + openClientId, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          first_name: document.getElementById("edit-client-first-name").value.trim() || null,
+          last_name: document.getElementById("edit-client-last-name").value.trim() || null,
+          email: document.getElementById("edit-client-email").value.trim(),
+          phone: document.getElementById("edit-client-phone").value.trim() || null
+        })
+      });
+      if (!resp.ok) return;
+      document.getElementById("client-detail").classList.remove("open");
+      openClientId = null;
+      await loadClients();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("add-client-btn").addEventListener("click", async function () {
+    const email = document.getElementById("new-client-email").value.trim();
+    if (!email) {
+      showClientFormStatus("error", "Email is required.");
+      return;
+    }
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/customers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: email,
+          first_name: document.getElementById("new-client-first-name").value.trim() || null,
+          last_name: document.getElementById("new-client-last-name").value.trim() || null,
+          phone: document.getElementById("new-client-phone").value.trim() || null
+        })
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        showClientFormStatus("error", (data && data.error) || "Couldn't add that client.");
+        return;
+      }
+      document.getElementById("add-client-status").className = "portal-status";
+      document.getElementById("new-client-first-name").value = "";
+      document.getElementById("new-client-last-name").value = "";
+      document.getElementById("new-client-email").value = "";
+      document.getElementById("new-client-phone").value = "";
+      await loadClients();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // New-booking form: search saved clients and autofill on pick.
+  let bkClientSearchTimer = null;
+  document.getElementById("bk-client-search").addEventListener("input", function () {
+    const q = this.value.trim();
+    const resultsBox = document.getElementById("bk-client-results");
+    clearTimeout(bkClientSearchTimer);
+    if (!q) {
+      resultsBox.style.display = "none";
+      resultsBox.innerHTML = "";
+      return;
+    }
+    bkClientSearchTimer = setTimeout(async function () {
+      const resp = await authFetch("/api/customers?search=" + encodeURIComponent(q));
+      const rows = await resp.json();
+      if (!Array.isArray(rows) || rows.length === 0) {
+        resultsBox.style.display = "none";
+        resultsBox.innerHTML = "";
+        return;
+      }
+      resultsBox.innerHTML = rows.map(function (c) {
+        return (
+          '<div data-id="' + c.id + '" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:0.5px solid #eee6d6;">' +
+            (clientName(c) || c.email) + " -- " + (c.email || "") +
+          "</div>"
+        );
+      }).join("");
+      resultsBox.style.display = "block";
+      resultsBox.querySelectorAll("[data-id]").forEach(function (row) {
+        row.addEventListener("click", function () {
+          const c = rows.find(function (x) { return x.id === Number(row.dataset.id); });
+          if (!c) return;
+          document.getElementById("bk-email").value = c.email || "";
+          document.getElementById("bk-phone").value = c.phone || "";
+          document.getElementById("bk-first-name").value = c.first_name || "";
+          document.getElementById("bk-last-name").value = c.last_name || "";
+          document.getElementById("bk-client-search").value = clientName(c) || c.email || "";
+          resultsBox.style.display = "none";
+          resultsBox.innerHTML = "";
+        });
+      });
+    }, 300);
+  });
+
+  // -------------------------------------------------------------------
+  // Packages
+  // -------------------------------------------------------------------
+  let packagesCache = [];
+  let editingPackageId = null;
+
+  function widgetsLabel(p) {
+    const parts = [];
+    if (p.allow_backdrop_selection) parts.push("Backdrop");
+    if (p.allow_template_selection) parts.push("Template");
+    return parts.length ? parts.join(", ") : "--";
+  }
+
+  function populatePackagePickers() {
+    const active = packagesCache.filter(function (p) { return p.is_active; });
+    [document.getElementById("bk-package"), document.getElementById("edit-package")].forEach(function (select) {
+      const current = select.value;
+      const placeholder = select.id === "bk-package" ? "No package yet" : "No package";
+      select.innerHTML = '<option value="">' + placeholder + '</option>';
+      active.forEach(function (p) {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = (p.brand_slug ? brandNameForSlug(p.brand_slug) : "Any brand") + " -- " + p.name;
+        select.appendChild(opt);
+      });
+      select.value = current;
+    });
+  }
+
+  async function loadPackages() {
+    const resp = await fetch(API_BASE_URL + "/api/packages?include_inactive=1");
+    const rows = await resp.json();
+    packagesCache = Array.isArray(rows) ? rows : [];
+    populatePackagePickers();
+
+    const tbody = document.getElementById("packages-tbody");
+
+    if (packagesCache.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">No packages yet.</div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = packagesCache.map(function (p) {
+      const toggleBtn = p.is_active
+        ? '<button class="btn-danger" data-deactivate-pk="' + p.id + '">Deactivate</button>'
+        : '<button class="btn-secondary" data-reactivate-pk="' + p.id + '">Reactivate</button>';
       return (
         "<tr>" +
           "<td>" + (p.brand_slug ? brandNameForSlug(p.brand_slug) : "Any") + "</td>" +
@@ -592,8 +1088,10 @@
           "<td>" + (p.category || "--") + "</td>" +
           "<td>" + money(p.price) + "</td>" +
           "<td>" + (p.duration_hours || "--") + "</td>" +
+          "<td>" + boothTypeLabel(p.booth_type) + "</td>" +
+          "<td>" + widgetsLabel(p) + "</td>" +
           "<td>" + (p.is_active ? "Active" : "Inactive") + "</td>" +
-          "<td>" + (p.is_active ? '<button class="btn-danger" data-deactivate-pk="' + p.id + '">Deactivate</button>' : "") + "</td>" +
+          "<td style='display:flex;gap:6px;'><button class=\"btn-secondary\" data-edit-pk=\"" + p.id + "\">Edit</button>" + toggleBtn + "</td>" +
         "</tr>"
       );
     }).join("");
@@ -604,7 +1102,55 @@
         loadPackages();
       });
     });
+    tbody.querySelectorAll("[data-reactivate-pk]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        await authFetch("/api/packages/" + btn.dataset.reactivatePk, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ is_active: 1 })
+        });
+        loadPackages();
+      });
+    });
+    tbody.querySelectorAll("[data-edit-pk]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const p = packagesCache.find(function (x) { return x.id === Number(btn.dataset.editPk); });
+        if (!p) return;
+        editingPackageId = p.id;
+        document.getElementById("package-form-title").textContent = "Edit package #" + p.id;
+        document.getElementById("pk-brand").value = p.brand_id || "";
+        document.getElementById("pk-name").value = p.name || "";
+        document.getElementById("pk-category").value = p.category || "";
+        document.getElementById("pk-price").value = p.price || "";
+        document.getElementById("pk-duration").value = p.duration_hours || "";
+        document.getElementById("pk-booth-type").value = p.booth_type || "";
+        document.getElementById("pk-description").value = p.description || "";
+        document.getElementById("pk-allow-backdrop").checked = !!p.allow_backdrop_selection;
+        document.getElementById("pk-allow-template").checked = !!p.allow_template_selection;
+        document.getElementById("add-package-btn").textContent = "Save package";
+        document.getElementById("cancel-package-edit-btn").style.display = "inline-block";
+        document.getElementById("package-form-title").scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+    });
   }
+
+  function resetPackageForm() {
+    editingPackageId = null;
+    document.getElementById("package-form-title").textContent = "Add package";
+    document.getElementById("pk-brand").value = "";
+    document.getElementById("pk-name").value = "";
+    document.getElementById("pk-category").value = "";
+    document.getElementById("pk-price").value = "";
+    document.getElementById("pk-duration").value = "";
+    document.getElementById("pk-booth-type").value = "";
+    document.getElementById("pk-description").value = "";
+    document.getElementById("pk-allow-backdrop").checked = true;
+    document.getElementById("pk-allow-template").checked = true;
+    document.getElementById("add-package-btn").textContent = "Add package";
+    document.getElementById("cancel-package-edit-btn").style.display = "none";
+  }
+
+  document.getElementById("cancel-package-edit-btn").addEventListener("click", resetPackageForm);
 
   document.getElementById("add-package-btn").addEventListener("click", async function () {
     const name = document.getElementById("pk-name").value.trim();
@@ -613,26 +1159,191 @@
 
     const brandId = document.getElementById("pk-brand").value;
     const duration = document.getElementById("pk-duration").value;
+    const btn = document.getElementById("add-package-btn");
+    btn.disabled = true;
 
-    await authFetch("/api/packages", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        brand_id: brandId ? Number(brandId) : null,
-        name: name,
-        category: document.getElementById("pk-category").value.trim() || null,
-        price: price,
-        duration_hours: duration ? Number(duration) : null,
-        description: document.getElementById("pk-description").value.trim() || null
-      })
+    const payload = {
+      brand_id: brandId ? Number(brandId) : null,
+      name: name,
+      category: document.getElementById("pk-category").value.trim() || null,
+      price: price,
+      duration_hours: duration ? Number(duration) : null,
+      description: document.getElementById("pk-description").value.trim() || null,
+      booth_type: document.getElementById("pk-booth-type").value || null,
+      allow_backdrop_selection: document.getElementById("pk-allow-backdrop").checked ? 1 : 0,
+      allow_template_selection: document.getElementById("pk-allow-template").checked ? 1 : 0
+    };
+
+    try {
+      if (editingPackageId) {
+        await authFetch("/api/packages/" + editingPackageId, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      } else {
+        await authFetch("/api/packages", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      }
+      resetPackageForm();
+      loadPackages();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // -------------------------------------------------------------------
+  // Venues
+  // -------------------------------------------------------------------
+  let venuesCache = [];
+  let editingVenueId = null;
+
+  function showVenueFormStatus(kind, message) {
+    const el = document.getElementById("venue-form-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  function populateVenuePickers() {
+    const active = venuesCache.filter(function (v) { return v.is_active; });
+    [document.getElementById("bk-venue"), document.getElementById("edit-venue")].forEach(function (select) {
+      const current = select.value;
+      const placeholder = select.id === "bk-venue" ? "No venue yet" : "No venue set";
+      select.innerHTML = '<option value="">' + placeholder + '</option>';
+      active.forEach(function (v) {
+        const opt = document.createElement("option");
+        opt.value = v.id;
+        opt.textContent = v.name + (v.city ? " -- " + v.city + (v.state ? ", " + v.state : "") : "");
+        select.appendChild(opt);
+      });
+      select.value = current;
     });
+  }
 
-    document.getElementById("pk-name").value = "";
-    document.getElementById("pk-category").value = "";
-    document.getElementById("pk-price").value = "";
-    document.getElementById("pk-duration").value = "";
-    document.getElementById("pk-description").value = "";
-    loadPackages();
+  async function loadVenues() {
+    const resp = await fetch(API_BASE_URL + "/api/venues?include_inactive=1");
+    const rows = await resp.json();
+    venuesCache = Array.isArray(rows) ? rows : [];
+    populateVenuePickers();
+
+    const tbody = document.getElementById("venues-tbody");
+    if (venuesCache.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No venues yet.</div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = venuesCache.map(function (v) {
+      const toggleBtn = v.is_active
+        ? '<button class="btn-danger" data-deactivate-vn="' + v.id + '">Deactivate</button>'
+        : '<button class="btn-secondary" data-reactivate-vn="' + v.id + '">Reactivate</button>';
+      const cityState = [v.city, v.state].filter(Boolean).join(", ");
+      const contact = [v.contact_name, v.contact_phone].filter(Boolean).join(" -- ");
+      return (
+        "<tr>" +
+          "<td>" + v.name + "</td>" +
+          "<td>" + (cityState || "--") + "</td>" +
+          "<td>" + (contact || "--") + "</td>" +
+          "<td>" + (v.is_active ? "Active" : "Inactive") + "</td>" +
+          "<td style='display:flex;gap:6px;'><button class=\"btn-secondary\" data-edit-vn=\"" + v.id + "\">Edit</button>" + toggleBtn + "</td>" +
+        "</tr>"
+      );
+    }).join("");
+
+    tbody.querySelectorAll("[data-deactivate-vn]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        await authFetch("/api/venues/" + btn.dataset.deactivateVn, { method: "DELETE" });
+        loadVenues();
+      });
+    });
+    tbody.querySelectorAll("[data-reactivate-vn]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        await authFetch("/api/venues/" + btn.dataset.reactivateVn, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ is_active: 1 })
+        });
+        loadVenues();
+      });
+    });
+    tbody.querySelectorAll("[data-edit-vn]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const v = venuesCache.find(function (x) { return x.id === Number(btn.dataset.editVn); });
+        if (!v) return;
+        editingVenueId = v.id;
+        document.getElementById("venue-form-title").textContent = "Edit venue #" + v.id;
+        document.getElementById("vn-name").value = v.name || "";
+        document.getElementById("vn-address").value = v.address || "";
+        document.getElementById("vn-city").value = v.city || "";
+        document.getElementById("vn-state").value = v.state || "";
+        document.getElementById("vn-zip").value = v.zip || "";
+        document.getElementById("vn-contact-name").value = v.contact_name || "";
+        document.getElementById("vn-contact-phone").value = v.contact_phone || "";
+        document.getElementById("vn-contact-email").value = v.contact_email || "";
+        document.getElementById("vn-notes").value = v.notes || "";
+        document.getElementById("add-venue-btn").textContent = "Save venue";
+        document.getElementById("cancel-venue-edit-btn").style.display = "inline-block";
+        document.getElementById("venue-form-title").scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+    });
+  }
+
+  function resetVenueForm() {
+    editingVenueId = null;
+    document.getElementById("venue-form-title").textContent = "Add venue";
+    ["vn-name", "vn-address", "vn-city", "vn-state", "vn-zip", "vn-contact-name", "vn-contact-phone", "vn-contact-email", "vn-notes"].forEach(function (id) {
+      document.getElementById(id).value = "";
+    });
+    document.getElementById("add-venue-btn").textContent = "Add venue";
+    document.getElementById("cancel-venue-edit-btn").style.display = "none";
+    document.getElementById("venue-form-status").className = "portal-status";
+  }
+
+  document.getElementById("cancel-venue-edit-btn").addEventListener("click", resetVenueForm);
+
+  document.getElementById("add-venue-btn").addEventListener("click", async function () {
+    const name = document.getElementById("vn-name").value.trim();
+    if (!name) {
+      showVenueFormStatus("error", "Venue name is required.");
+      return;
+    }
+
+    const btn = this;
+    btn.disabled = true;
+
+    const payload = {
+      name: name,
+      address: document.getElementById("vn-address").value.trim() || null,
+      city: document.getElementById("vn-city").value.trim() || null,
+      state: document.getElementById("vn-state").value.trim() || null,
+      zip: document.getElementById("vn-zip").value.trim() || null,
+      contact_name: document.getElementById("vn-contact-name").value.trim() || null,
+      contact_phone: document.getElementById("vn-contact-phone").value.trim() || null,
+      contact_email: document.getElementById("vn-contact-email").value.trim() || null,
+      notes: document.getElementById("vn-notes").value.trim() || null
+    };
+
+    try {
+      if (editingVenueId) {
+        await authFetch("/api/venues/" + editingVenueId, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      } else {
+        await authFetch("/api/venues", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      }
+      resetVenueForm();
+      loadVenues();
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   // -------------------------------------------------------------------
@@ -640,9 +1351,12 @@
   // -------------------------------------------------------------------
   (async function init() {
     await loadBrands();
+    await loadAccount();
     await loadBookings();
     await loadEquipment();
     await loadPackages();
+    await loadVenues();
+    await loadClients();
   })();
 </script>
 
