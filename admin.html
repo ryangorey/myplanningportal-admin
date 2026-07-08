@@ -99,6 +99,47 @@
         <button class="btn-secondary" id="close-detail-btn">Close</button>
       </div>
     </div>
+
+    <div class="add-panel">
+      <h3>New booking</h3>
+      <div id="new-booking-status" class="portal-status"></div>
+      <div class="form-grid">
+        <div>
+          <label>Brand</label>
+          <select id="bk-brand"></select>
+        </div>
+        <div>
+          <label>Event date</label>
+          <input type="date" id="bk-date">
+        </div>
+        <div>
+          <label>Event type</label>
+          <input type="text" id="bk-event-type" placeholder="e.g. wedding, corporate">
+        </div>
+        <div></div>
+        <div>
+          <label>Customer email</label>
+          <input type="email" id="bk-email" placeholder="name@email.com">
+        </div>
+        <div>
+          <label>Customer phone</label>
+          <input type="text" id="bk-phone" placeholder="optional">
+        </div>
+        <div>
+          <label>Customer first name</label>
+          <input type="text" id="bk-first-name" placeholder="optional">
+        </div>
+        <div>
+          <label>Customer last name</label>
+          <input type="text" id="bk-last-name" placeholder="optional">
+        </div>
+        <div class="full">
+          <label>Notes</label>
+          <textarea id="bk-notes" placeholder="optional"></textarea>
+        </div>
+      </div>
+      <button class="btn-primary" id="add-booking-btn">Create booking</button>
+    </div>
   </div>
 
   <!-- ============================== Equipment ============================== -->
@@ -230,6 +271,7 @@
 
     const filterSelect = document.getElementById("f-brand");
     const pkSelect = document.getElementById("pk-brand");
+    const bkSelect = document.getElementById("bk-brand");
     brandsCache.forEach(function (b) {
       const opt1 = document.createElement("option");
       opt1.value = b.slug;
@@ -240,6 +282,11 @@
       opt2.value = b.id;
       opt2.textContent = b.display_name;
       pkSelect.appendChild(opt2);
+
+      const opt3 = document.createElement("option");
+      opt3.value = b.slug;
+      opt3.textContent = b.display_name;
+      bkSelect.appendChild(opt3);
     });
   }
 
@@ -359,6 +406,67 @@
     document.getElementById("f-brand").value = "";
     document.getElementById("f-status").value = "";
     loadBookings();
+  });
+
+  function showNewBookingStatus(kind, message) {
+    const el = document.getElementById("new-booking-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  document.getElementById("add-booking-btn").addEventListener("click", async function () {
+    const email = document.getElementById("bk-email").value.trim();
+    const eventDate = document.getElementById("bk-date").value;
+    const brandSlug = document.getElementById("bk-brand").value;
+
+    if (!email || !eventDate || !brandSlug) {
+      showNewBookingStatus("error", "Brand, event date, and customer email are required.");
+      return;
+    }
+
+    const btn = document.getElementById("add-booking-btn");
+    btn.disabled = true;
+    btn.textContent = "Creating...";
+
+    try {
+      const resp = await fetch(API_BASE_URL + "/api/bookings", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          brand_slug: brandSlug,
+          event_date: eventDate,
+          event_type: document.getElementById("bk-event-type").value.trim() || null,
+          notes: document.getElementById("bk-notes").value.trim() || null,
+          customer: {
+            email: email,
+            phone: document.getElementById("bk-phone").value.trim() || null,
+            first_name: document.getElementById("bk-first-name").value.trim() || null,
+            last_name: document.getElementById("bk-last-name").value.trim() || null
+          }
+        })
+      });
+      const data = await resp.json().catch(function () { return null; });
+
+      if (!resp.ok) {
+        showNewBookingStatus("error", (data && data.error) || "Couldn't create that booking.");
+        return;
+      }
+
+      showNewBookingStatus("success", "Booking #" + data.id + " created as an inquiry. Click it in the table to price it or mark it booked.");
+      document.getElementById("bk-date").value = "";
+      document.getElementById("bk-event-type").value = "";
+      document.getElementById("bk-email").value = "";
+      document.getElementById("bk-phone").value = "";
+      document.getElementById("bk-first-name").value = "";
+      document.getElementById("bk-last-name").value = "";
+      document.getElementById("bk-notes").value = "";
+      await loadBookings();
+    } catch (err) {
+      showNewBookingStatus("error", "Couldn't reach the server. Check your connection and try again.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Create booking";
+    }
   });
 
   // -------------------------------------------------------------------
