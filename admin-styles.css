@@ -376,3 +376,91 @@ textarea {
   font-weight: 500;
   margin: 0 0 14px;
 }
+
+/* ------------------------------------------------------------------ */
+/* Calendar                                                            */
+/* ------------------------------------------------------------------ */
+
+.calendar-legend {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: #6b6355;
+  margin: -6px 0 18px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.calendar-legend .status-pill {
+  padding: 1px 8px;
+  margin-right: 4px;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.cal-dow {
+  font-size: 11px;
+  font-weight: 500;
+  color: #6b6355;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  text-align: center;
+  padding: 4px 0 8px;
+}
+
+.cal-day {
+  background: #fff;
+  border: 0.5px solid #e3ddcf;
+  border-radius: 8px;
+  min-height: 96px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.cal-day.other-month {
+  background: #faf7f0;
+  opacity: 0.55;
+}
+
+.cal-day.today {
+  border-color: #bb9159;
+  border-width: 1.5px;
+}
+
+.cal-day-num {
+  font-size: 12px;
+  font-weight: 500;
+  color: #0e1a2b;
+}
+
+.cal-day-bookings {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cal-booking-pill {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cal-booking-pill:hover { filter: brightness(0.95); }
+
+.cal-more {
+  font-size: 11px;
+  color: #6b6355;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.cal-more:hover { text-decoration: underline; }
