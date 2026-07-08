@@ -184,6 +184,42 @@ textarea {
   font-family: inherit;
 }
 
+.settings-dropdown {
+  position: relative;
+}
+
+.dropdown-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: #fff;
+  border: 0.5px solid #e3ddcf;
+  border-radius: 8px;
+  min-width: 160px;
+  padding: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  z-index: 20;
+}
+
+.dropdown-menu.open { display: block; }
+
+.dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: #0e1a2b;
+  font-size: 13px;
+  font-family: inherit;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.dropdown-item:hover { background: #faf7f0; }
+
 .admin-tabs {
   background: #fff;
   border-bottom: 0.5px solid #e3ddcf;
