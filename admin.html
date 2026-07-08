@@ -11,8 +11,8 @@
 </head>
 <body>
 
-<div class="admin-topbar">
-  <img src="https://raw.githubusercontent.com/ryangorey/RGMLlogo/102e74830a7fd89dca2451699469c742463da962/my_planning_portal_logo_dark_bg_small.png" alt="myplanningportal">
+<div class="admin-topbar" id="admin-topbar">
+  <img id="topbar-logo" src="https://raw.githubusercontent.com/ryangorey/RGMLlogo/102e74830a7fd89dca2451699469c742463da962/my_planning_portal_logo_dark_bg_small.png" alt="myplanningportal">
   <div class="who">
     <span id="who-name"></span>
     <span class="role-badge" id="who-role"></span>
@@ -20,6 +20,7 @@
       <button id="settings-toggle-btn">Settings <i class="ti" style="font-style:normal;">&#9662;</i></button>
       <div class="dropdown-menu" id="settings-menu">
         <button class="dropdown-item" data-tab="account">Account details</button>
+        <button class="dropdown-item" data-tab="branding">Branding</button>
         <button class="dropdown-item" data-tab="staff">Staff</button>
         <button class="dropdown-item" data-tab="clients">Clients</button>
         <button class="dropdown-item" data-tab="venues">Venues</button>
@@ -341,6 +342,14 @@
     </div>
   </div>
 
+  <!-- ============================== Branding ============================== -->
+  <div class="admin-panel" id="panel-branding">
+    <h1>Branding</h1>
+    <p class="section-sub">Logo, name, and accent color for each brand. The myplanningportal brand controls the logo shown here in Admin and on the customer login/dashboard.</p>
+
+    <div id="branding-cards"></div>
+  </div>
+
   <!-- ============================== Staff ============================== -->
   <div class="admin-panel" id="panel-staff">
     <h1>Staff</h1>
@@ -514,8 +523,13 @@
   const canEditPackages = roleAtLeast(myRole, "admin");
   const canSeeVenuesClients = roleAtLeast(myRole, "sales");
   const canSeeStaff = roleAtLeast(myRole, "admin");
+  const canEditBranding = roleAtLeast(myRole, "admin");
 
   function applyRoleVisibility() {
+    if (!canEditBranding) {
+      const b = document.querySelector('.dropdown-item[data-tab="branding"]');
+      if (b) b.style.display = "none";
+    }
     if (!canSeeEquipment) {
       const t = document.querySelector('.admin-tab[data-tab="equipment"]');
       if (t) t.style.display = "none";
@@ -669,6 +683,135 @@
   });
 
   // -------------------------------------------------------------------
+  // Branding
+  // -------------------------------------------------------------------
+  function brandingStatusId(brandId) { return "brand-status-" + brandId; }
+
+  function showBrandingStatus(brandId, kind, message) {
+    const el = document.getElementById(brandingStatusId(brandId));
+    if (!el) return;
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  function renderBrandingCards() {
+    const container = document.getElementById("branding-cards");
+    if (!container) return;
+
+    if (!canEditBranding) {
+      container.innerHTML = '<div class="empty-state">Only Admins and the Super Admin can edit branding.</div>';
+      return;
+    }
+
+    container.innerHTML = brandsCache.map(function (b) {
+      const logoInner = b.logo_url
+        ? '<img src="' + API_BASE_URL + b.logo_url + '" alt="' + b.display_name + ' logo">'
+        : '<span>No logo yet</span>';
+      const color = b.primary_color || "#0e1a2b";
+      return (
+        '<div class="branding-card" data-brand-id="' + b.id + '">' +
+          "<h3>" + b.display_name + " <span style=\"font-weight:400;color:#6b6355;font-size:12px;\">(" + b.slug + ")</span></h3>" +
+          '<div id="' + brandingStatusId(b.id) + '" class="portal-status"></div>' +
+          '<div class="logo-row">' +
+            '<div class="logo-preview' + (b.logo_url ? "" : " empty") + '">' + logoInner + "</div>" +
+            '<div>' +
+              '<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" data-logo-file="' + b.id + '">' +
+              '<button class="btn-secondary" data-upload-logo="' + b.id + '" style="margin-top:6px;">Upload logo</button>' +
+            "</div>" +
+          "</div>" +
+          '<div class="form-grid">' +
+            '<div><label>Display name</label><input type="text" value="' + b.display_name.replace(/"/g, "&quot;") + '" data-brand-name="' + b.id + '"></div>' +
+            '<div>' +
+              "<label>Primary color</label>" +
+              '<div class="color-row">' +
+                '<input type="color" value="' + color + '" data-brand-color-picker="' + b.id + '">' +
+                '<input type="text" value="' + color + '" data-brand-color-text="' + b.id + '" placeholder="#0e1a2b">' +
+              "</div>" +
+            "</div>" +
+          "</div>" +
+          '<button class="btn-primary" data-save-brand="' + b.id + '" style="margin-top:10px;">Save details</button>' +
+        "</div>"
+      );
+    }).join("");
+
+    container.querySelectorAll("[data-brand-color-picker]").forEach(function (picker) {
+      picker.addEventListener("input", function () {
+        const id = picker.dataset.brandColorPicker;
+        const textInput = container.querySelector('[data-brand-color-text="' + id + '"]');
+        if (textInput) textInput.value = picker.value;
+      });
+    });
+
+    container.querySelectorAll("[data-upload-logo]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        const brandId = btn.dataset.uploadLogo;
+        const fileInput = container.querySelector('[data-logo-file="' + brandId + '"]');
+        const file = fileInput && fileInput.files && fileInput.files[0];
+        if (!file) {
+          showBrandingStatus(brandId, "error", "Choose an image file first.");
+          return;
+        }
+        btn.disabled = true;
+        btn.textContent = "Uploading...";
+        try {
+          const resp = await authFetch("/api/brands/" + brandId + "/logo", {
+            method: "POST",
+            headers: { "content-type": file.type },
+            body: file
+          });
+          const data = await resp.json().catch(function () { return null; });
+          if (!resp.ok) {
+            showBrandingStatus(brandId, "error", (data && data.error) || "Couldn't upload that logo.");
+            return;
+          }
+          showBrandingStatus(brandId, "success", "Logo updated.");
+          await loadBrands();
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Upload logo";
+        }
+      });
+    });
+
+    container.querySelectorAll("[data-save-brand]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        const brandId = btn.dataset.saveBrand;
+        const nameInput = container.querySelector('[data-brand-name="' + brandId + '"]');
+        const colorInput = container.querySelector('[data-brand-color-text="' + brandId + '"]');
+        const name = nameInput.value.trim();
+        const color = colorInput.value.trim();
+
+        if (!name) {
+          showBrandingStatus(brandId, "error", "Display name can't be empty.");
+          return;
+        }
+        if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) {
+          showBrandingStatus(brandId, "error", "Color needs to be a hex code like #0e1a2b.");
+          return;
+        }
+
+        btn.disabled = true;
+        try {
+          const resp = await authFetch("/api/brands/" + brandId, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ display_name: name, primary_color: color || null })
+          });
+          const data = await resp.json().catch(function () { return null; });
+          if (!resp.ok) {
+            showBrandingStatus(brandId, "error", (data && data.error) || "Couldn't save.");
+            return;
+          }
+          showBrandingStatus(brandId, "success", "Saved.");
+          await loadBrands();
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  // -------------------------------------------------------------------
   // Brands (used by the bookings filter and the packages form)
   // -------------------------------------------------------------------
   let brandsCache = [];
@@ -702,11 +845,29 @@
       opt4.textContent = b.display_name;
       calSelect.appendChild(opt4);
     });
+
+    applyTopbarBranding();
+    renderBrandingCards();
   }
 
   function brandNameForSlug(slug) {
     const b = brandsCache.find(function (x) { return x.slug === slug; });
     return b ? b.display_name : slug;
+  }
+
+  // The myplanningportal brand controls the shared/unbranded logo shown
+  // here in Admin and on the customer login/dashboard -- falls back to the
+  // hardcoded default image/color already in the HTML until someone saves
+  // something in the Branding panel.
+  function applyTopbarBranding() {
+    const mpp = brandsCache.find(function (b) { return b.slug === "myplanningportal"; });
+    if (!mpp) return;
+    if (mpp.logo_url) {
+      document.getElementById("topbar-logo").src = API_BASE_URL + mpp.logo_url;
+    }
+    if (mpp.primary_color) {
+      document.getElementById("admin-topbar").style.background = mpp.primary_color;
+    }
   }
 
   function boothTypeLabel(v) {
