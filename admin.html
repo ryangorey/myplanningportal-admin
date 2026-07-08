@@ -30,6 +30,7 @@
 
 <div class="admin-tabs">
   <button class="admin-tab active" data-tab="bookings">Bookings</button>
+  <button class="admin-tab" data-tab="calendar">Calendar</button>
   <button class="admin-tab" data-tab="equipment">Equipment</button>
   <button class="admin-tab" data-tab="packages">Packages</button>
 </div>
@@ -203,6 +204,34 @@
       </div>
       <button class="btn-primary" id="add-booking-btn">Create booking</button>
     </div>
+  </div>
+
+  <!-- ============================== Calendar ============================== -->
+  <div class="admin-panel" id="panel-calendar">
+    <h1>Calendar</h1>
+    <p class="section-sub">Every booking across all three brands, by event date.</p>
+
+    <div class="filter-bar">
+      <div>
+        <label for="cal-brand">Brand</label>
+        <select id="cal-brand"><option value="">All brands</option></select>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:8px;">
+        <button class="btn-secondary" id="cal-prev-btn">&larr;</button>
+        <div id="cal-month-label" style="font-family:'Fraunces',serif;font-size:15px;font-weight:500;min-width:150px;text-align:center;padding-bottom:8px;"></div>
+        <button class="btn-secondary" id="cal-next-btn">&rarr;</button>
+      </div>
+      <div><button class="btn-secondary" id="cal-today-btn">Today</button></div>
+    </div>
+
+    <div class="calendar-legend">
+      <span class="status-pill inquiry">Inquiry</span>
+      <span class="status-pill booked">Booked</span>
+      <span class="status-pill completed">Completed</span>
+      <span class="status-pill cancelled">Cancelled</span>
+    </div>
+
+    <div class="calendar-grid" id="calendar-grid"></div>
   </div>
 
   <!-- ============================== Equipment ============================== -->
@@ -558,6 +587,7 @@
     const filterSelect = document.getElementById("f-brand");
     const pkSelect = document.getElementById("pk-brand");
     const bkSelect = document.getElementById("bk-brand");
+    const calSelect = document.getElementById("cal-brand");
     brandsCache.forEach(function (b) {
       const opt1 = document.createElement("option");
       opt1.value = b.slug;
@@ -573,6 +603,11 @@
       opt3.value = b.slug;
       opt3.textContent = b.display_name;
       bkSelect.appendChild(opt3);
+
+      const opt4 = document.createElement("option");
+      opt4.value = b.slug;
+      opt4.textContent = b.display_name;
+      calSelect.appendChild(opt4);
     });
   }
 
@@ -716,6 +751,7 @@
       document.getElementById("booking-detail").classList.remove("open");
       openBookingId = null;
       await loadBookings();
+      await loadCalendarBookings();
     } catch (err) {
       // authFetch already redirects on 401; other errors just leave the panel open to retry.
     } finally {
@@ -794,6 +830,7 @@
       document.getElementById("bk-last-name").value = "";
       document.getElementById("bk-notes").value = "";
       await loadBookings();
+      await loadCalendarBookings();
     } catch (err) {
       showNewBookingStatus("error", "Couldn't reach the server. Check your connection and try again.");
     } finally {
@@ -801,6 +838,133 @@
       btn.textContent = "Create booking";
     }
   });
+
+  // -------------------------------------------------------------------
+  // Calendar
+  // -------------------------------------------------------------------
+  let calendarBookingsCache = [];
+  let calendarViewDate = new Date();
+
+  const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  function isoDate(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+
+  function bookingLabel(b) {
+    return ((b.customer_first_name || "") + " " + (b.customer_last_name || "")).trim() ||
+      b.customer_email || b.event_type || ("#" + b.id);
+  }
+
+  function bookingPillHtml(b) {
+    return '<div class="cal-booking-pill status-pill ' + b.status + '" data-id="' + b.id + '">' + bookingLabel(b) + "</div>";
+  }
+
+  function wireCalendarPillClicks(root) {
+    root.querySelectorAll(".cal-booking-pill").forEach(function (el) {
+      el.addEventListener("click", function () {
+        showPanel("bookings");
+        openBookingDetail(el.dataset.id);
+      });
+    });
+  }
+
+  async function loadCalendarBookings() {
+    const brand = document.getElementById("cal-brand").value;
+    const params = new URLSearchParams();
+    if (brand) params.set("brand", brand);
+    const resp = await authFetch("/api/bookings?" + params.toString());
+    const rows = await resp.json();
+    calendarBookingsCache = Array.isArray(rows) ? rows : [];
+    renderCalendar();
+  }
+
+  function renderCalendar() {
+    const year = calendarViewDate.getFullYear();
+    const month = calendarViewDate.getMonth();
+    document.getElementById("cal-month-label").textContent = MONTH_NAMES[month] + " " + year;
+
+    const startDow = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+    const todayStr = isoDate(new Date());
+
+    const byDate = {};
+    calendarBookingsCache.forEach(function (b) {
+      if (!byDate[b.event_date]) byDate[b.event_date] = [];
+      byDate[b.event_date].push(b);
+    });
+
+    const totalCells = Math.ceil((startDow + daysInMonth) / 7) * 7;
+    const cells = [];
+    for (let i = 0; i < totalCells; i++) {
+      const dayNum = i - startDow + 1;
+      let cellDate, otherMonth = false;
+      if (dayNum < 1) {
+        cellDate = new Date(year, month - 1, daysInPrevMonth + dayNum);
+        otherMonth = true;
+      } else if (dayNum > daysInMonth) {
+        cellDate = new Date(year, month + 1, dayNum - daysInMonth);
+        otherMonth = true;
+      } else {
+        cellDate = new Date(year, month, dayNum);
+      }
+      const dateStr = isoDate(cellDate);
+      cells.push({
+        dateStr: dateStr,
+        dayLabel: cellDate.getDate(),
+        otherMonth: otherMonth,
+        isToday: dateStr === todayStr,
+        bookings: byDate[dateStr] || []
+      });
+    }
+
+    let html = DOW_LABELS.map(function (d) { return '<div class="cal-dow">' + d + "</div>"; }).join("");
+
+    html += cells.map(function (c) {
+      const visible = c.bookings.slice(0, 3);
+      const overflow = c.bookings.length - visible.length;
+      const pills = visible.map(bookingPillHtml).join("");
+      const more = overflow > 0 ? '<div class="cal-more" data-date="' + c.dateStr + '">+' + overflow + " more</div>" : "";
+      const classes = "cal-day" + (c.otherMonth ? " other-month" : "") + (c.isToday ? " today" : "");
+      return (
+        '<div class="' + classes + '" data-date="' + c.dateStr + '">' +
+          '<div class="cal-day-num">' + c.dayLabel + "</div>" +
+          '<div class="cal-day-bookings">' + pills + more + "</div>" +
+        "</div>"
+      );
+    }).join("");
+
+    const grid = document.getElementById("calendar-grid");
+    grid.innerHTML = html;
+    wireCalendarPillClicks(grid);
+
+    grid.querySelectorAll(".cal-more").forEach(function (el) {
+      el.addEventListener("click", function () {
+        const dateStr = el.dataset.date;
+        const cell = grid.querySelector('.cal-day[data-date="' + dateStr + '"]');
+        if (!cell) return;
+        const dayBookings = calendarBookingsCache.filter(function (b) { return b.event_date === dateStr; });
+        const box = cell.querySelector(".cal-day-bookings");
+        box.innerHTML = dayBookings.map(bookingPillHtml).join("");
+        wireCalendarPillClicks(box);
+      });
+    });
+  }
+
+  document.getElementById("cal-prev-btn").addEventListener("click", function () {
+    calendarViewDate = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1);
+    renderCalendar();
+  });
+  document.getElementById("cal-next-btn").addEventListener("click", function () {
+    calendarViewDate = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1);
+    renderCalendar();
+  });
+  document.getElementById("cal-today-btn").addEventListener("click", function () {
+    calendarViewDate = new Date();
+    renderCalendar();
+  });
+  document.getElementById("cal-brand").addEventListener("change", loadCalendarBookings);
 
   // -------------------------------------------------------------------
   // Equipment
@@ -1353,6 +1517,7 @@
     await loadBrands();
     await loadAccount();
     await loadBookings();
+    await loadCalendarBookings();
     await loadEquipment();
     await loadPackages();
     await loadVenues();
