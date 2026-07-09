@@ -2266,6 +2266,3513 @@
             '<span class="pipeline-column-title">' + s.name + "</span>" +
             '<span class="pipeline-column-count">' + stageLeads.length + "</span>" +
           "</div>" +
+          '<div class="pipeline-column-cards">' + cardsHtml + "</div>" +
+        "</div>"
+      );
+    }).join("");
+
+    board.querySelectorAll(".lead-card").forEach(function (card) {
+      card.addEventListener("click", function (e) {
+        if (e.target.closest(".lead-stage-select")) return;
+        openLeadDetail(card.dataset.id);
+      });
+    });
+    board.querySelectorAll(".lead-stage-select").forEach(function (select) {
+      select.addEventListener("click", function (e) { e.stopPropagation(); });
+      select.addEventListener("change", async function () {
+        const resp = await authFetch("/api/leads/" + select.dataset.id, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ stage_id: Number(select.value) })
+        });
+        if (resp.ok) await loadLeads();
+      });
+    });
+  }
+
+  let leadSearchTimer = null;
+  document.getElementById("lead-search").addEventListener("input", function () {
+    clearTimeout(leadSearchTimer);
+    leadSearchTimer = setTimeout(loadLeads, 300);
+  });
+  document.getElementById("lead-filter-brand").addEventListener("change", loadLeads);
+
+  // Client typeahead for linking a new lead to an existing client -- same
+  // search-and-pick pattern used for the "New task" form's client search.
+  document.getElementById("lead-client-search").addEventListener("input", function () {
+    const q = this.value.trim();
+    document.getElementById("lead-client-id").value = "";
+    const resultsBox = document.getElementById("lead-client-results");
+    clearTimeout(this._searchTimer);
+    if (!q) {
+      resultsBox.style.display = "none";
+      resultsBox.innerHTML = "";
+      return;
+    }
+    const input = this;
+    this._searchTimer = setTimeout(async function () {
+      const resp = await authFetch("/api/customers?search=" + encodeURIComponent(q));
+      const rows = await resp.json();
+      if (!Array.isArray(rows) || rows.length === 0) {
+        resultsBox.style.display = "none";
+        resultsBox.innerHTML = "";
+        return;
+      }
+      resultsBox.innerHTML = rows.map(function (c) {
+        return (
+          '<div data-id="' + c.id + '" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:0.5px solid #eee6d6;">' +
+            (clientName(c) || c.email) + " -- " + (c.email || "") +
+          "</div>"
+        );
+      }).join("");
+      resultsBox.style.display = "block";
+      resultsBox.querySelectorAll("[data-id]").forEach(function (row) {
+        row.addEventListener("click", function () {
+          const c = rows.find(function (x) { return x.id === Number(row.dataset.id); });
+          if (!c) return;
+          document.getElementById("lead-client-id").value = c.id;
+          input.value = clientName(c) || c.email || "";
+          resultsBox.style.display = "none";
+          resultsBox.innerHTML = "";
+        });
+      });
+    }, 300);
+  });
+
+  function showAddLeadStatus(kind, message) {
+    const el = document.getElementById("add-lead-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  document.getElementById("toggle-add-lead-btn").addEventListener("click", function () {
+    const panel = document.getElementById("add-lead-panel");
+    if (panel.style.display === "block") {
+      panel.style.display = "none";
+    } else {
+      panel.style.display = "block";
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  });
+  document.getElementById("cancel-add-lead-btn").addEventListener("click", function () {
+    document.getElementById("add-lead-panel").style.display = "none";
+  });
+
+  document.getElementById("add-lead-btn").addEventListener("click", async function () {
+    const brandId = document.getElementById("lead-brand").value;
+    if (!brandId) { showAddLeadStatus("error", "Pick a brand first."); return; }
+    const firstName = document.getElementById("lead-first-name").value.trim();
+    const lastName = document.getElementById("lead-last-name").value.trim();
+    const email = document.getElementById("lead-email").value.trim();
+    const organization = document.getElementById("lead-organization").value.trim();
+    if (!firstName && !lastName && !organization && !email) {
+      showAddLeadStatus("error", "Give the lead a name, organization, or email.");
+      return;
+    }
+
+    const payload = {
+      brand_id: Number(brandId),
+      first_name: firstName || null,
+      last_name: lastName || null,
+      email: email || null,
+      phone: document.getElementById("lead-phone").value.trim() || null,
+      organization: organization || null,
+      event_date: document.getElementById("lead-event-date").value || null,
+      estimated_value: document.getElementById("lead-estimated-value").value || null,
+      source: document.getElementById("lead-source").value.trim() || null,
+      notes: document.getElementById("lead-notes").value.trim() || null
+    };
+    const clientId = document.getElementById("lead-client-id").value;
+    if (clientId) payload.customer_id = Number(clientId);
+    if (canAssignTasks) {
+      const assignee = document.getElementById("lead-assignee").value;
+      if (assignee) payload.assigned_to = Number(assignee);
+    }
+
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/leads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        showAddLeadStatus("error", (data && data.error) || "Couldn't add that lead.");
+        return;
+      }
+      document.getElementById("add-lead-panel").style.display = "none";
+      ["lead-first-name", "lead-last-name", "lead-email", "lead-phone", "lead-organization", "lead-source", "lead-notes"].forEach(function (id) {
+        document.getElementById(id).value = "";
+      });
+      document.getElementById("lead-event-date").value = "";
+      document.getElementById("lead-estimated-value").value = "";
+      document.getElementById("lead-client-search").value = "";
+      document.getElementById("lead-client-id").value = "";
+      if (canAssignTasks) document.getElementById("lead-assignee").value = "";
+      document.getElementById("add-lead-status").className = "portal-status";
+      await loadLeads();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ---- Lead detail (view/edit/delete an existing lead) ----
+
+  function showLeadDetailStatus(kind, message) {
+    const el = document.getElementById("lead-detail-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  async function openLeadDetail(id) {
+    const resp = await authFetch("/api/leads/" + id);
+    const l = await resp.json();
+    if (!resp.ok) return;
+    openLeadId = l.id;
+
+    document.getElementById("lead-detail-title").textContent = leadCardTitle(l);
+    fillStageSelect("edit-lead-stage");
+    document.getElementById("edit-lead-stage").value = l.stage_id;
+    document.getElementById("edit-lead-brand").value = l.brand_id;
+    document.getElementById("edit-lead-first-name").value = l.first_name || "";
+    document.getElementById("edit-lead-last-name").value = l.last_name || "";
+    document.getElementById("edit-lead-email").value = l.email || "";
+    document.getElementById("edit-lead-phone").value = l.phone || "";
+    document.getElementById("edit-lead-organization").value = l.organization || "";
+    document.getElementById("edit-lead-event-date").value = l.event_date || "";
+    document.getElementById("edit-lead-estimated-value").value = l.estimated_value != null ? l.estimated_value : "";
+    document.getElementById("edit-lead-source").value = l.source || "";
+    document.getElementById("edit-lead-notes").value = l.notes || "";
+    if (canAssignTasks) {
+      fillAssigneeSelect("edit-lead-assignee", "Unassigned");
+      document.getElementById("edit-lead-assignee").value = l.assigned_to || "";
+    }
+
+    document.getElementById("lead-detail-status").className = "portal-status";
+    document.getElementById("lead-detail-panel").style.display = "block";
+    document.getElementById("lead-detail-panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  document.getElementById("close-lead-detail-btn").addEventListener("click", function () {
+    document.getElementById("lead-detail-panel").style.display = "none";
+    openLeadId = null;
+  });
+
+  document.getElementById("save-lead-btn").addEventListener("click", async function () {
+    if (!openLeadId) return;
+    const firstName = document.getElementById("edit-lead-first-name").value.trim();
+    const lastName = document.getElementById("edit-lead-last-name").value.trim();
+    const email = document.getElementById("edit-lead-email").value.trim();
+    const organization = document.getElementById("edit-lead-organization").value.trim();
+    if (!firstName && !lastName && !organization && !email) {
+      showLeadDetailStatus("error", "Give the lead a name, organization, or email.");
+      return;
+    }
+
+    const payload = {
+      brand_id: Number(document.getElementById("edit-lead-brand").value),
+      stage_id: Number(document.getElementById("edit-lead-stage").value),
+      first_name: firstName || null,
+      last_name: lastName || null,
+      email: email || null,
+      phone: document.getElementById("edit-lead-phone").value.trim() || null,
+      organization: organization || null,
+      event_date: document.getElementById("edit-lead-event-date").value || null,
+      estimated_value: document.getElementById("edit-lead-estimated-value").value || null,
+      source: document.getElementById("edit-lead-source").value.trim() || null,
+      notes: document.getElementById("edit-lead-notes").value.trim() || null
+    };
+    if (canAssignTasks) {
+      const assignee = document.getElementById("edit-lead-assignee").value;
+      payload.assigned_to = assignee ? Number(assignee) : null;
+    }
+
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/leads/" + openLeadId, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        showLeadDetailStatus("error", (data && data.error) || "Couldn't save that lead.");
+        return;
+      }
+      document.getElementById("lead-detail-panel").style.display = "none";
+      openLeadId = null;
+      await loadLeads();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("delete-lead-btn").addEventListener("click", async function () {
+    if (!openLeadId) return;
+    if (!confirm("Delete this lead? This can't be undone.")) return;
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/leads/" + openLeadId, { method: "DELETE" });
+      if (!resp.ok) {
+        const data = await resp.json().catch(function () { return null; });
+        showLeadDetailStatus("error", (data && data.error) || "Couldn't delete that lead.");
+        return;
+      }
+      document.getElementById("lead-detail-panel").style.display = "none";
+      openLeadId = null;
+      await loadLeads();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // -------------------------------------------------------------------
+  // Equipment
+  // -------------------------------------------------------------------
+  async function loadEquipment() {
+    const resp = await fetch(API_BASE_URL + "/api/equipment");
+    const rows = await resp.json();
+    const tbody = document.getElementById("equipment-tbody");
+
+    if (!Array.isArray(rows) || rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No equipment yet.</div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows.map(function (e) {
+      return (
+        "<tr>" +
+          "<td>" + e.name + "</td>" +
+          "<td>" + e.category + "</td>" +
+          "<td>" + (e.notes || "--") + "</td>" +
+          "<td>" + (e.is_active ? "Active" : "Inactive") + "</td>" +
+          "<td>" + (canEditEquipment && e.is_active ? '<button class="btn-danger" data-deactivate-eq="' + e.id + '">Deactivate</button>' : "") + "</td>" +
+        "</tr>"
+      );
+    }).join("");
+
+    tbody.querySelectorAll("[data-deactivate-eq]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        await authFetch("/api/equipment/" + btn.dataset.deactivateEq, { method: "DELETE" });
+        loadEquipment();
+      });
+    });
+  }
+
+  document.getElementById("add-equipment-btn").addEventListener("click", async function () {
+    const name = document.getElementById("eq-name").value.trim();
+    const category = document.getElementById("eq-category").value;
+    const notes = document.getElementById("eq-notes").value.trim();
+    if (!name) return;
+
+    await authFetch("/api/equipment", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: name, category: category, notes: notes || null })
+    });
+
+    document.getElementById("eq-name").value = "";
+    document.getElementById("eq-notes").value = "";
+    loadEquipment();
+  });
+
+  document.getElementById("toggle-add-equipment-btn").addEventListener("click", function () {
+    const panel = document.getElementById("add-equipment-panel");
+    if (panel.style.display === "block") {
+      panel.style.display = "none";
+    } else {
+      panel.style.display = "block";
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  });
+  document.getElementById("cancel-add-equipment-btn").addEventListener("click", function () {
+    document.getElementById("add-equipment-panel").style.display = "none";
+  });
+
+  // -------------------------------------------------------------------
+  // Clients
+  // -------------------------------------------------------------------
+  let clientsCache = [];
+  let openClientId = null;
+
+  function clientName(c) {
+    return ((c.first_name || "") + " " + (c.last_name || "")).trim();
+  }
+
+  function showClientFormStatus(kind, message) {
+    const el = document.getElementById("add-client-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  async function loadClients() {
+    const search = document.getElementById("client-search").value.trim();
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    const resp = await authFetch("/api/customers?" + params.toString());
+    const rows = await resp.json();
+    clientsCache = Array.isArray(rows) ? rows : [];
+
+    const tbody = document.getElementById("clients-tbody");
+    if (clientsCache.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No clients found.</div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = clientsCache.map(function (c) {
+      return (
+        '<tr class="row-clickable" data-id="' + c.id + '">' +
+          "<td>" + (clientName(c) || "--") + "</td>" +
+          "<td>" + (c.organization || "--") + "</td>" +
+          "<td>" + (c.email || "--") + "</td>" +
+          "<td>" + (c.phone || "--") + "</td>" +
+          "<td></td>" +
+        "</tr>"
+      );
+    }).join("");
+
+    tbody.querySelectorAll("tr[data-id]").forEach(function (tr) {
+      tr.addEventListener("click", function () { openClientDetail(tr.dataset.id); });
+    });
+  }
+
+  let clientSearchTimer = null;
+  document.getElementById("client-search").addEventListener("input", function () {
+    clearTimeout(clientSearchTimer);
+    clientSearchTimer = setTimeout(loadClients, 300);
+  });
+
+  async function openClientDetail(id) {
+    const resp = await authFetch("/api/customers/" + id);
+    const c = await resp.json();
+    openClientId = c.id;
+
+    document.getElementById("client-detail-title").textContent = clientName(c) || c.email || ("Client #" + c.id);
+    document.getElementById("edit-client-first-name").value = c.first_name || "";
+    document.getElementById("edit-client-last-name").value = c.last_name || "";
+    document.getElementById("edit-client-email").value = c.email || "";
+    document.getElementById("edit-client-phone").value = c.phone || "";
+    document.getElementById("edit-client-organization").value = c.organization || "";
+
+    renderClientEvents(c.bookings);
+
+    document.getElementById("client-detail").classList.add("open");
+    document.getElementById("client-detail").scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+    await loadClientTasks(id);
+    await loadClientContacts(id);
+  }
+
+  // Splits a client's booking history into what's still coming up
+  // (soonest first, cancelled excluded) versus everything already past or
+  // cancelled -- same dash-row look as the Home dashboard's widgets.
+  function clientEventRowHtml(b) {
+    return (
+      '<div class="dash-row">' +
+        '<div class="dash-row-main">' +
+          '<span class="dash-row-title">' + b.event_date + " -- " + (b.brand_name || "") + "</span>" +
+          '<span class="dash-row-meta">' + (b.package_name || "No package") + " -- " + money(b.package_total) + "</span>" +
+        "</div>" +
+        '<span class="status-pill ' + b.status + '">' + b.status + "</span>" +
+      "</div>"
+    );
+  }
+
+  function renderClientEvents(bookings) {
+    const upcomingBox = document.getElementById("client-upcoming-events");
+    const pastBox = document.getElementById("client-past-events");
+    const all = Array.isArray(bookings) ? bookings : [];
+    const todayStr = isoDate(new Date());
+
+    const upcoming = all
+      .filter(function (b) { return b.event_date >= todayStr && b.status !== "cancelled"; })
+      .sort(function (a, b) { return a.event_date.localeCompare(b.event_date); });
+    const past = all.filter(function (b) { return b.event_date < todayStr || b.status === "cancelled"; });
+
+    upcomingBox.innerHTML = upcoming.length ? upcoming.map(clientEventRowHtml).join("") : dashEmptyRow("No upcoming events.");
+    pastBox.innerHTML = past.length ? past.map(clientEventRowHtml).join("") : dashEmptyRow("No past events.");
+  }
+
+  document.getElementById("close-client-detail-btn").addEventListener("click", function () {
+    document.getElementById("client-detail").classList.remove("open");
+    openClientId = null;
+  });
+
+  // -------------------------------------------------------------------
+  // Client detail: assigned tasks (read-only summary -- managed from the
+  // Home dashboard's Tasks widget) and the CRM contact log.
+  // -------------------------------------------------------------------
+  async function loadClientTasks(customerId) {
+    const resp = await authFetch("/api/customers/" + customerId + "/tasks");
+    const rows = await resp.json();
+    const box = document.getElementById("client-tasks-list");
+    if (!Array.isArray(rows) || rows.length === 0) {
+      box.innerHTML = dashEmptyRow("No tasks tied to this client.");
+      return;
+    }
+    box.innerHTML = rows.map(function (t) {
+      const isDone = t.status === "completed";
+      const assignee = ((t.assignee_first_name || "") + " " + (t.assignee_last_name || "")).trim() || t.assignee_email || "Unassigned";
+      const meta = (t.due_date ? "Due " + t.due_date : "No due date") + " -- " + assignee;
+      return (
+        '<div class="dash-row' + (isDone ? " completed" : "") + '">' +
+          '<span class="dash-row-main">' +
+            '<span class="dash-row-title">' + t.title + "</span>" +
+            '<span class="dash-row-meta">' + meta + "</span>" +
+          "</span>" +
+          '<span class="status-pill ' + (isDone ? "completed" : "inquiry") + '">' + t.status + "</span>" +
+        "</div>"
+      );
+    }).join("");
+  }
+
+  function showClientTaskStatus(kind, message) {
+    const el = document.getElementById("client-task-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  document.getElementById("add-client-task-btn").addEventListener("click", async function () {
+    if (!openClientId) return;
+    const title = document.getElementById("client-task-title").value.trim();
+    if (!title) { showClientTaskStatus("error", "Give the task a title first."); return; }
+
+    const payload = {
+      title: title,
+      due_date: document.getElementById("client-task-due").value || null,
+      customer_id: openClientId
+    };
+    if (canAssignTasks) {
+      const assignee = document.getElementById("client-task-assignee").value;
+      if (assignee) payload.assigned_to = Number(assignee);
+    }
+
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/tasks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        showClientTaskStatus("error", (data && data.error) || "Couldn't add that task.");
+        return;
+      }
+      document.getElementById("client-task-status").className = "portal-status";
+      document.getElementById("client-task-title").value = "";
+      document.getElementById("client-task-due").value = "";
+      if (canAssignTasks) document.getElementById("client-task-assignee").value = "";
+      await loadClientTasks(openClientId);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  function contactTypeLabel(type) {
+    return { call: "Call", email: "Email", meeting: "Meeting", note: "Note" }[type] || type;
+  }
+
+  async function loadClientContacts(customerId) {
+    const resp = await authFetch("/api/customers/" + customerId + "/contacts");
+    const rows = await resp.json();
+    const box = document.getElementById("client-contacts-list");
+    if (!Array.isArray(rows) || rows.length === 0) {
+      box.innerHTML = dashEmptyRow("No contact history yet.");
+      return;
+    }
+    box.innerHTML = rows.map(function (c) {
+      const staffName = ((c.staff_first_name || "") + " " + (c.staff_last_name || "")).trim() || "Staff";
+      const when = c.contacted_at ? c.contacted_at.replace("T", " ").slice(0, 16) : "";
+      return (
+        '<div class="dash-row" data-contact-id="' + c.id + '">' +
+          '<span class="dash-row-main">' +
+            '<span class="dash-row-title">' + contactTypeLabel(c.contact_type) + " -- " + when + "</span>" +
+            '<span class="dash-row-meta">' + (c.notes ? c.notes + " -- " : "") + "logged by " + staffName + "</span>" +
+          "</span>" +
+          '<div class="dash-row-actions"><button class="btn-danger" data-delete-contact="' + c.id + '">Delete</button></div>' +
+        "</div>"
+      );
+    }).join("");
+
+    box.querySelectorAll("[data-delete-contact]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        await authFetch("/api/client-contacts/" + btn.dataset.deleteContact, { method: "DELETE" });
+        loadClientContacts(customerId);
+      });
+    });
+  }
+
+  document.getElementById("add-contact-btn").addEventListener("click", async function () {
+    if (!openClientId) return;
+    const type = document.getElementById("new-contact-type").value;
+    const whenLocal = document.getElementById("new-contact-when").value;
+    const notes = document.getElementById("new-contact-notes").value.trim();
+    const statusEl = document.getElementById("add-contact-status");
+
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/customers/" + openClientId + "/contacts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          contact_type: type,
+          notes: notes || null,
+          contacted_at: whenLocal ? new Date(whenLocal).toISOString() : null
+        })
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        statusEl.textContent = (data && data.error) || "Couldn't log that contact.";
+        statusEl.className = "portal-status show error";
+        return;
+      }
+      statusEl.className = "portal-status";
+      document.getElementById("new-contact-when").value = "";
+      document.getElementById("new-contact-notes").value = "";
+      await loadClientContacts(openClientId);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("save-client-btn").addEventListener("click", async function () {
+    if (!openClientId) return;
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/customers/" + openClientId, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          first_name: document.getElementById("edit-client-first-name").value.trim() || null,
+          last_name: document.getElementById("edit-client-last-name").value.trim() || null,
+          email: document.getElementById("edit-client-email").value.trim(),
+          phone: document.getElementById("edit-client-phone").value.trim() || null,
+          organization: document.getElementById("edit-client-organization").value.trim() || null
+        })
+      });
+      if (!resp.ok) return;
+      document.getElementById("client-detail").classList.remove("open");
+      openClientId = null;
+      await loadClients();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("toggle-add-client-btn").addEventListener("click", function () {
+    const panel = document.getElementById("add-client-panel");
+    if (panel.style.display === "block") {
+      panel.style.display = "none";
+    } else {
+      panel.style.display = "block";
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  });
+  document.getElementById("cancel-add-client-btn").addEventListener("click", function () {
+    document.getElementById("add-client-panel").style.display = "none";
+  });
+
+  document.getElementById("add-client-btn").addEventListener("click", async function () {
+    const email = document.getElementById("new-client-email").value.trim();
+    if (!email) {
+      showClientFormStatus("error", "Email is required.");
+      return;
+    }
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/customers", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: email,
+          first_name: document.getElementById("new-client-first-name").value.trim() || null,
+          last_name: document.getElementById("new-client-last-name").value.trim() || null,
+          phone: document.getElementById("new-client-phone").value.trim() || null,
+          organization: document.getElementById("new-client-organization").value.trim() || null
+        })
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        showClientFormStatus("error", (data && data.error) || "Couldn't add that client.");
+        return;
+      }
+      document.getElementById("add-client-status").className = "portal-status";
+      document.getElementById("new-client-first-name").value = "";
+      document.getElementById("new-client-last-name").value = "";
+      document.getElementById("new-client-organization").value = "";
+      document.getElementById("new-client-email").value = "";
+      document.getElementById("new-client-phone").value = "";
+      await loadClients();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // New-booking form: search saved clients and autofill on pick.
+  let bkClientSearchTimer = null;
+  document.getElementById("bk-client-search").addEventListener("input", function () {
+    const q = this.value.trim();
+    const resultsBox = document.getElementById("bk-client-results");
+    clearTimeout(bkClientSearchTimer);
+    if (!q) {
+      resultsBox.style.display = "none";
+      resultsBox.innerHTML = "";
+      return;
+    }
+    bkClientSearchTimer = setTimeout(async function () {
+      const resp = await authFetch("/api/customers?search=" + encodeURIComponent(q));
+      const rows = await resp.json();
+      if (!Array.isArray(rows) || rows.length === 0) {
+        resultsBox.style.display = "none";
+        resultsBox.innerHTML = "";
+        return;
+      }
+      resultsBox.innerHTML = rows.map(function (c) {
+        return (
+          '<div data-id="' + c.id + '" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:0.5px solid #eee6d6;">' +
+            (clientName(c) || c.email) + " -- " + (c.email || "") +
+          "</div>"
+        );
+      }).join("");
+      resultsBox.style.display = "block";
+      resultsBox.querySelectorAll("[data-id]").forEach(function (row) {
+        row.addEventListener("click", function () {
+          const c = rows.find(function (x) { return x.id === Number(row.dataset.id); });
+          if (!c) return;
+          document.getElementById("bk-email").value = c.email || "";
+          document.getElementById("bk-phone").value = c.phone || "";
+          document.getElementById("bk-first-name").value = c.first_name || "";
+          document.getElementById("bk-last-name").value = c.last_name || "";
+          document.getElementById("bk-client-search").value = clientName(c) || c.email || "";
+          resultsBox.style.display = "none";
+          resultsBox.innerHTML = "";
+        });
+      });
+    }, 300);
+  });
+
+  // -------------------------------------------------------------------
+  // Packages
+  // -------------------------------------------------------------------
+  let packagesCache = [];
+  let editingPackageId = null;
+
+  function widgetsLabel(p) {
+    const parts = [];
+    if (p.allow_backdrop_selection) parts.push("Backdrop");
+    if (p.allow_template_selection) parts.push("Template");
+    return parts.length ? parts.join(", ") : "--";
+  }
+
+  function populatePackagePickers() {
+    const active = packagesCache.filter(function (p) { return p.is_active; });
+    [document.getElementById("bk-package"), document.getElementById("edit-package")].forEach(function (select) {
+      const current = select.value;
+      const placeholder = select.id === "bk-package" ? "No package yet" : "No package";
+      select.innerHTML = '<option value="">' + placeholder + '</option>';
+      active.forEach(function (p) {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = (p.brand_slug ? brandNameForSlug(p.brand_slug) : "Any brand") + " -- " + p.name;
+        select.appendChild(opt);
+      });
+      select.value = current;
+    });
+  }
+
+  async function loadPackages() {
+    const resp = await fetch(API_BASE_URL + "/api/packages?include_inactive=1");
+    const rows = await resp.json();
+    packagesCache = Array.isArray(rows) ? rows : [];
+    populatePackagePickers();
+
+    const tbody = document.getElementById("packages-tbody");
+
+    if (packagesCache.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">No packages yet.</div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = packagesCache.map(function (p) {
+      const toggleBtn = !canEditPackages ? "" : p.is_active
+        ? '<button class="btn-danger" data-deactivate-pk="' + p.id + '">Deactivate</button>'
+        : '<button class="btn-secondary" data-reactivate-pk="' + p.id + '">Reactivate</button>';
+      const editBtn = canEditPackages ? '<button class="btn-secondary" data-edit-pk="' + p.id + '">Edit</button>' : "";
+      return (
+        "<tr>" +
+          "<td>" + (p.brand_slug ? brandNameForSlug(p.brand_slug) : "Any") + "</td>" +
+          "<td>" + p.name + "</td>" +
+          "<td>" + (p.category || "--") + "</td>" +
+          "<td>" + money(p.price) + "</td>" +
+          "<td>" + (p.duration_hours || "--") + "</td>" +
+          "<td>" + boothTypeLabel(p.booth_type) + "</td>" +
+          "<td>" + widgetsLabel(p) + "</td>" +
+          "<td>" + (p.is_active ? "Active" : "Inactive") + "</td>" +
+          "<td style='display:flex;gap:6px;'>" + editBtn + toggleBtn + "</td>" +
+        "</tr>"
+      );
+    }).join("");
+
+    tbody.querySelectorAll("[data-deactivate-pk]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        await authFetch("/api/packages/" + btn.dataset.deactivatePk, { method: "DELETE" });
+        loadPackages();
+      });
+    });
+    tbody.querySelectorAll("[data-reactivate-pk]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        await authFetch("/api/packages/" + btn.dataset.reactivatePk, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ is_active: 1 })
+        });
+        loadPackages();
+      });
+    });
+    tbody.querySelectorAll("[data-edit-pk]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const p = packagesCache.find(function (x) { return x.id === Number(btn.dataset.editPk); });
+        if (!p) return;
+        editingPackageId = p.id;
+        document.getElementById("package-form-title").textContent = "Edit package #" + p.id;
+        document.getElementById("pk-brand").value = p.brand_id || "";
+        document.getElementById("pk-name").value = p.name || "";
+        document.getElementById("pk-category").value = p.category || "";
+        document.getElementById("pk-price").value = p.price || "";
+        document.getElementById("pk-duration").value = p.duration_hours || "";
+        document.getElementById("pk-booth-type").value = p.booth_type || "";
+        document.getElementById("pk-description").value = p.description || "";
+        document.getElementById("pk-allow-backdrop").checked = !!p.allow_backdrop_selection;
+        document.getElementById("pk-allow-template").checked = !!p.allow_template_selection;
+        document.getElementById("add-package-btn").textContent = "Save package";
+        document.getElementById("cancel-package-edit-btn").style.display = "inline-block";
+        document.getElementById("add-package-panel").style.display = "block";
+        document.getElementById("package-form-title").scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+    });
+  }
+
+  function resetPackageForm() {
+    editingPackageId = null;
+    document.getElementById("package-form-title").textContent = "Add package";
+    document.getElementById("pk-brand").value = "";
+    document.getElementById("pk-name").value = "";
+    document.getElementById("pk-category").value = "";
+    document.getElementById("pk-price").value = "";
+    document.getElementById("pk-duration").value = "";
+    document.getElementById("pk-booth-type").value = "";
+    document.getElementById("pk-description").value = "";
+    document.getElementById("pk-allow-backdrop").checked = true;
+    document.getElementById("pk-allow-template").checked = true;
+    document.getElementById("add-package-btn").textContent = "Add package";
+    document.getElementById("cancel-package-edit-btn").style.display = "none";
+  }
+
+  document.getElementById("cancel-package-edit-btn").addEventListener("click", function () {
+    resetPackageForm();
+    document.getElementById("add-package-panel").style.display = "none";
+  });
+  document.getElementById("toggle-add-package-btn").addEventListener("click", function () {
+    const panel = document.getElementById("add-package-panel");
+    if (panel.style.display === "block") {
+      panel.style.display = "none";
+    } else {
+      panel.style.display = "block";
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  });
+
+  document.getElementById("add-package-btn").addEventListener("click", async function () {
+    const name = document.getElementById("pk-name").value.trim();
+    const price = Number(document.getElementById("pk-price").value);
+    if (!name || !price) return;
+
+    const brandId = document.getElementById("pk-brand").value;
+    const duration = document.getElementById("pk-duration").value;
+    const btn = document.getElementById("add-package-btn");
+    btn.disabled = true;
+
+    const payload = {
+      brand_id: brandId ? Number(brandId) : null,
+      name: name,
+      category: document.getElementById("pk-category").value.trim() || null,
+      price: price,
+      duration_hours: duration ? Number(duration) : null,
+      description: document.getElementById("pk-description").value.trim() || null,
+      booth_type: document.getElementById("pk-booth-type").value || null,
+      allow_backdrop_selection: document.getElementById("pk-allow-backdrop").checked ? 1 : 0,
+      allow_template_selection: document.getElementById("pk-allow-template").checked ? 1 : 0
+    };
+
+    try {
+      if (editingPackageId) {
+        await authFetch("/api/packages/" + editingPackageId, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      } else {
+        await authFetch("/api/packages", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      }
+      resetPackageForm();
+      loadPackages();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // -------------------------------------------------------------------
+  // Venues
+  // -------------------------------------------------------------------
+  let venuesCache = [];
+  let editingVenueId = null;
+
+  function showVenueFormStatus(kind, message) {
+    const el = document.getElementById("venue-form-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  function populateVenuePickers() {
+    const active = venuesCache.filter(function (v) { return v.is_active; });
+    [document.getElementById("bk-venue"), document.getElementById("edit-venue")].forEach(function (select) {
+      const current = select.value;
+      const placeholder = select.id === "bk-venue" ? "No venue yet" : "No venue set";
+      select.innerHTML = '<option value="">' + placeholder + '</option>';
+      active.forEach(function (v) {
+        const opt = document.createElement("option");
+        opt.value = v.id;
+        opt.textContent = v.name + (v.city ? " -- " + v.city + (v.state ? ", " + v.state : "") : "");
+        select.appendChild(opt);
+      });
+      select.value = current;
+    });
+  }
+
+  async function loadVenues() {
+    const resp = await fetch(API_BASE_URL + "/api/venues?include_inactive=1");
+    const rows = await resp.json();
+    venuesCache = Array.isArray(rows) ? rows : [];
+    populateVenuePickers();
+
+    const tbody = document.getElementById("venues-tbody");
+    if (venuesCache.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No venues yet.</div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = venuesCache.map(function (v) {
+      const toggleBtn = v.is_active
+        ? '<button class="btn-danger" data-deactivate-vn="' + v.id + '">Deactivate</button>'
+        : '<button class="btn-secondary" data-reactivate-vn="' + v.id + '">Reactivate</button>';
+      const cityState = [v.city, v.state].filter(Boolean).join(", ");
+      const contact = [v.contact_name, v.contact_phone].filter(Boolean).join(" -- ");
+      return (
+        "<tr>" +
+          "<td>" + v.name + "</td>" +
+          "<td>" + (cityState || "--") + "</td>" +
+          "<td>" + (contact || "--") + "</td>" +
+          "<td>" + (v.is_active ? "Active" : "Inactive") + "</td>" +
+          "<td style='display:flex;gap:6px;'><button class=\"btn-secondary\" data-edit-vn=\"" + v.id + "\">Edit</button>" + toggleBtn + "</td>" +
+        "</tr>"
+      );
+    }).join("");
+
+    tbody.querySelectorAll("[data-deactivate-vn]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        await authFetch("/api/venues/" + btn.dataset.deactivateVn, { method: "DELETE" });
+        loadVenues();
+      });
+    });
+    tbody.querySelectorAll("[data-reactivate-vn]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        await authFetch("/api/venues/" + btn.dataset.reactivateVn, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ is_active: 1 })
+        });
+        loadVenues();
+      });
+    });
+    tbody.querySelectorAll("[data-edit-vn]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const v = venuesCache.find(function (x) { return x.id === Number(btn.dataset.editVn); });
+        if (!v) return;
+        editingVenueId = v.id;
+        document.getElementById("venue-form-title").textContent = "Edit venue #" + v.id;
+        document.getElementById("vn-name").value = v.name || "";
+        document.getElementById("vn-address").value = v.address || "";
+        document.getElementById("vn-city").value = v.city || "";
+        document.getElementById("vn-state").value = v.state || "";
+        document.getElementById("vn-zip").value = v.zip || "";
+        document.getElementById("vn-contact-name").value = v.contact_name || "";
+        document.getElementById("vn-contact-phone").value = v.contact_phone || "";
+        document.getElementById("vn-contact-email").value = v.contact_email || "";
+        document.getElementById("vn-notes").value = v.notes || "";
+        document.getElementById("add-venue-btn").textContent = "Save venue";
+        document.getElementById("cancel-venue-edit-btn").style.display = "inline-block";
+        document.getElementById("venue-form-title").scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+    });
+  }
+
+  function resetVenueForm() {
+    editingVenueId = null;
+    document.getElementById("venue-form-title").textContent = "Add venue";
+    ["vn-name", "vn-address", "vn-city", "vn-state", "vn-zip", "vn-contact-name", "vn-contact-phone", "vn-contact-email", "vn-notes"].forEach(function (id) {
+      document.getElementById(id).value = "";
+    });
+    document.getElementById("add-venue-btn").textContent = "Add venue";
+    document.getElementById("cancel-venue-edit-btn").style.display = "none";
+    document.getElementById("venue-form-status").className = "portal-status";
+  }
+
+  document.getElementById("cancel-venue-edit-btn").addEventListener("click", resetVenueForm);
+
+  document.getElementById("add-venue-btn").addEventListener("click", async function () {
+    const name = document.getElementById("vn-name").value.trim();
+    if (!name) {
+      showVenueFormStatus("error", "Venue name is required.");
+      return;
+    }
+
+    const btn = this;
+    btn.disabled = true;
+
+    const payload = {
+      name: name,
+      address: document.getElementById("vn-address").value.trim() || null,
+      city: document.getElementById("vn-city").value.trim() || null,
+      state: document.getElementById("vn-state").value.trim() || null,
+      zip: document.getElementById("vn-zip").value.trim() || null,
+      contact_name: document.getElementById("vn-contact-name").value.trim() || null,
+      contact_phone: document.getElementById("vn-contact-phone").value.trim() || null,
+      contact_email: document.getElementById("vn-contact-email").value.trim() || null,
+      notes: document.getElementById("vn-notes").value.trim() || null
+    };
+
+    try {
+      if (editingVenueId) {
+        await authFetch("/api/venues/" + editingVenueId, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      } else {
+        await authFetch("/api/venues", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+      }
+      resetVenueForm();
+      loadVenues();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // -------------------------------------------------------------------
+  // Staff
+  // -------------------------------------------------------------------
+  let staffCache = [];
+  let editingStaffId = null;
+  const ASSIGNABLE_ROLES = ["employee", "sales", "admin", "super_admin"];
+
+  function showStaffStatus(kind, message) {
+    const el = document.getElementById("staff-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  function populateRoleOptions() {
+    const select = document.getElementById("sf-role");
+    const current = select.value;
+    const assignable = ASSIGNABLE_ROLES.filter(function (r) { return canManageRoleClient(myRole, r); });
+    select.innerHTML = assignable.map(function (r) {
+      return '<option value="' + r + '">' + roleLabel(r) + '</option>';
+    }).join("");
+    if (assignable.includes(current)) select.value = current;
+  }
+
+  async function loadStaff() {
+    // Always fetches the FULL roster -- active and inactive alike. Any
+    // hiding of inactive accounts happens client-side in renderStaffTable,
+    // driven by the "Hide inactive" checkbox, so nobody ever silently
+    // disappears from this list.
+    const resp = await authFetch("/api/staff");
+    const rows = await resp.json();
+    staffCache = Array.isArray(rows) ? rows : [];
+    renderStaffTable();
+  }
+
+  function renderStaffTable() {
+    const search = document.getElementById("staff-search").value.trim().toLowerCase();
+    const hideInactive = document.getElementById("staff-hide-inactive").checked;
+
+    const filtered = staffCache.filter(function (s) {
+      if (hideInactive && !s.is_active) return false;
+      if (!search) return true;
+      const name = ((s.first_name || "") + " " + (s.last_name || "")).toLowerCase();
+      const email = (s.email || "").toLowerCase();
+      return name.includes(search) || email.includes(search);
+    });
+
+    const tbody = document.getElementById("staff-tbody");
+    if (staffCache.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No staff accounts yet.</div></td></tr>';
+      return;
+    }
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No staff match that search.</div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = filtered.map(function (s) {
+      const isSelf = s.id === session.staff.id;
+      const manageable = !isSelf && canManageRoleClient(myRole, s.role);
+      const name = ((s.first_name || "") + " " + (s.last_name || "")).trim() || "--";
+      let actions = "";
+      if (manageable) {
+        actions = '<button class="btn-secondary" data-edit-staff="' + s.id + '">Edit</button> ' +
+          (s.is_active
+            ? '<button class="btn-danger" data-deactivate-staff="' + s.id + '">Deactivate</button>'
+            : '<button class="btn-secondary" data-reactivate-staff="' + s.id + '">Reactivate</button>');
+      }
+      return (
+        "<tr>" +
+          "<td>" + name + (isSelf ? " (you)" : "") + "</td>" +
+          "<td>" + s.email + "</td>" +
+          "<td>" + roleLabel(s.role) + "</td>" +
+          "<td>" + (s.is_active ? "Active" : "Inactive") + "</td>" +
+          "<td style='display:flex;gap:6px;'>" + actions + "</td>" +
+        "</tr>"
+      );
+    }).join("");
+
+    tbody.querySelectorAll("[data-deactivate-staff]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        const resp = await authFetch("/api/staff/" + btn.dataset.deactivateStaff, { method: "DELETE" });
+        const data = await resp.json().catch(function () { return null; });
+        if (!resp.ok) { showStaffStatus("error", (data && data.error) || "Couldn't deactivate that account."); return; }
+        loadStaff();
+      });
+    });
+    tbody.querySelectorAll("[data-reactivate-staff]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        await authFetch("/api/staff/" + btn.dataset.reactivateStaff, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ is_active: 1 })
+        });
+        loadStaff();
+      });
+    });
+    tbody.querySelectorAll("[data-edit-staff]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const s = staffCache.find(function (x) { return x.id === Number(btn.dataset.editStaff); });
+        if (!s) return;
+        editingStaffId = s.id;
+        document.getElementById("staff-form-title").textContent = "Edit " + s.email;
+        document.getElementById("sf-first-name").value = s.first_name || "";
+        document.getElementById("sf-last-name").value = s.last_name || "";
+        document.getElementById("sf-email").value = s.email || "";
+        populateRoleOptions();
+        document.getElementById("sf-role").value = s.role;
+        document.getElementById("sf-password").value = "";
+        document.getElementById("sf-password").placeholder = "Leave blank to keep current password";
+        document.getElementById("sf-password-label").textContent = "New password (optional)";
+        document.getElementById("add-staff-btn").textContent = "Save staff";
+        document.getElementById("cancel-staff-edit-btn").style.display = "inline-block";
+        document.getElementById("add-staff-panel").style.display = "block";
+        document.getElementById("staff-form-title").scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+    });
+  }
+
+  function resetStaffForm() {
+    editingStaffId = null;
+    document.getElementById("staff-form-title").textContent = "Add staff";
+    document.getElementById("sf-first-name").value = "";
+    document.getElementById("sf-last-name").value = "";
+    document.getElementById("sf-email").value = "";
+    populateRoleOptions();
+    document.getElementById("sf-password").value = "";
+    document.getElementById("sf-password").placeholder = "At least 8 characters";
+    document.getElementById("sf-password-label").textContent = "Password";
+    document.getElementById("add-staff-btn").textContent = "Add staff";
+    document.getElementById("cancel-staff-edit-btn").style.display = "none";
+  }
+
+  if (canSeeStaff) {
+    document.getElementById("cancel-staff-edit-btn").addEventListener("click", function () {
+      resetStaffForm();
+      document.getElementById("add-staff-panel").style.display = "none";
+    });
+    document.getElementById("toggle-add-staff-btn").addEventListener("click", function () {
+      const panel = document.getElementById("add-staff-panel");
+      if (panel.style.display === "block") {
+        panel.style.display = "none";
+      } else {
+        panel.style.display = "block";
+        panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    });
+    document.getElementById("staff-search").addEventListener("input", renderStaffTable);
+    document.getElementById("staff-hide-inactive").addEventListener("change", renderStaffTable);
+
+    document.getElementById("add-staff-btn").addEventListener("click", async function () {
+      const email = document.getElementById("sf-email").value.trim();
+      const role = document.getElementById("sf-role").value;
+      const password = document.getElementById("sf-password").value;
+
+      if (!email) { showStaffStatus("error", "Email is required."); return; }
+      if (!editingStaffId && (!password || password.length < 8)) {
+        showStaffStatus("error", "Password must be at least 8 characters."); return;
+      }
+      if (password && password.length < 8) {
+        showStaffStatus("error", "Password must be at least 8 characters."); return;
+      }
+
+      const btn = this;
+      btn.disabled = true;
+      try {
+        let resp, data;
+        if (editingStaffId) {
+          const payload = {
+            first_name: document.getElementById("sf-first-name").value.trim() || null,
+            last_name: document.getElementById("sf-last-name").value.trim() || null,
+            email: email,
+            role: role
+          };
+          if (password) payload.new_password = password;
+          resp = await authFetch("/api/staff/" + editingStaffId, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+        } else {
+          resp = await authFetch("/api/staff", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              first_name: document.getElementById("sf-first-name").value.trim() || null,
+              last_name: document.getElementById("sf-last-name").value.trim() || null,
+              email: email,
+              role: role,
+              password: password
+            })
+          });
+        }
+        data = await resp.json().catch(function () { return null; });
+        if (!resp.ok) {
+          showStaffStatus("error", (data && data.error) || "Couldn't save that account.");
+          return;
+        }
+        document.getElementById("staff-status").className = "portal-status";
+        resetStaffForm();
+        loadStaff();
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    resetStaffForm();
+  }
+
+  // -------------------------------------------------------------------
+  // Boot
+  // -------------------------------------------------------------------
+  // Every step below is wrapped so one section throwing (a bad row of
+  // data, a not-yet-migrated table, anything) can't silently take down
+  // every section that comes after it in this list -- that's exactly what
+  // was happening to the Home dashboard widgets before: they were loaded
+  // last, so any earlier failure meant they never ran at all, and
+  // toggling one "on" just revealed a permanently-empty box since it had
+  // never actually been fetched.
+  async function safeLoad(label, fn) {
+    try {
+      await fn();
+    } catch (err) {
+      console.error("Couldn't load " + label + ":", err);
+    }
+  }
+
+  (async function init() {
+    await safeLoad("brands", loadBrands);
+    await safeLoad("account", loadAccount);
+
+    // Home is the landing tab -- get it populated first, before anything
+    // else below gets a chance to fail and block it.
+    populateTaskAssignee();
+    await safeLoad("dashboard calendar widget", loadDashCalendar);
+    await safeLoad("dashboard bookings widget", loadDashBookings);
+    await safeLoad("dashboard tasks widget", loadDashTasks);
+
+    await safeLoad("bookings", loadBookings);
+    await safeLoad("calendar tab", loadCalendarBookings);
+    await safeLoad("equipment", loadEquipment);
+    await safeLoad("packages", loadPackages);
+    await safeLoad("venues", loadVenues);
+    if (canSeeVenuesClients) {
+      await safeLoad("clients", loadClients);
+      await safeLoad("pipeline stages", loadPipelineStages);
+      await safeLoad("leads", loadLeads);
+    }
+    if (canSeeStaff) {
+      await safeLoad("staff", loadStaff);
+      populateTaskAssignee(); // refresh now that staffCache is actually populated
+      populateLeadAssignee();
+    }
+  })();
+</script>
+
+</body>
+</html>        <button class="dropdown-item" data-tab="company">Company settings</button>
+        <button class="dropdown-item" data-tab="staff">Staff</button>
+        <button class="dropdown-item" data-tab="clients">Clients</button>
+        <button class="dropdown-item" data-tab="venues">Venues</button>
+      </div>
+    </div>
+    <button id="logout-btn">Sign out</button>
+  </div>
+</div>
+
+<div class="admin-tabs">
+  <button class="admin-tab active" data-tab="home">Home</button>
+  <button class="admin-tab" data-tab="bookings">Bookings</button>
+  <button class="admin-tab" data-tab="calendar">Calendar</button>
+  <button class="admin-tab" data-tab="leads">Leads</button>
+  <button class="admin-tab" data-tab="equipment">Equipment</button>
+  <button class="admin-tab" data-tab="packages">Packages</button>
+</div>
+
+<div class="admin-content">
+
+  <!-- ============================== Home ============================== -->
+  <div class="admin-panel active" id="panel-home">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h1>Home</h1>
+        <p class="section-sub">Your day at a glance.</p>
+      </div>
+      <button class="btn-secondary" id="customize-home-btn">Customize</button>
+    </div>
+
+    <div class="customize-panel" id="customize-panel">
+      <label class="toggle-row"><input type="checkbox" id="show-widget-calendar"> Calendar (leads &amp; bookings)</label>
+      <label class="toggle-row"><input type="checkbox" id="show-widget-tasks"> Tasks (upcoming &amp; completed)</label>
+      <label class="toggle-row"><input type="checkbox" id="show-widget-bookings"> Bookings</label>
+    </div>
+
+    <div class="dash-widgets">
+      <div class="dash-widget" id="widget-calendar">
+        <h3>Calendar &ndash; leads &amp; bookings</h3>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button class="btn-secondary" id="dash-cal-prev-btn">&larr;</button>
+            <div id="dash-cal-month-label" style="font-family:'Fraunces',serif;font-size:14px;font-weight:500;min-width:130px;text-align:center;"></div>
+            <button class="btn-secondary" id="dash-cal-next-btn">&rarr;</button>
+          </div>
+          <button class="btn-secondary" id="dash-cal-today-btn">Today</button>
+        </div>
+        <div class="calendar-legend">
+          <span class="status-pill inquiry">Inquiry</span>
+          <span class="status-pill booked">Booked</span>
+          <span class="status-pill completed">Completed</span>
+          <span class="status-pill cancelled">Cancelled</span>
+        </div>
+        <div class="calendar-grid" id="dash-calendar-grid"></div>
+      </div>
+
+      <div class="dash-widget" id="widget-tasks">
+        <h3>Tasks</h3>
+        <div id="dash-task-status" class="portal-status"></div>
+        <div class="form-grid" style="margin-bottom:10px;">
+          <div class="full"><label>New task</label><input type="text" id="new-task-title" placeholder="Task title"></div>
+          <div><label>Due date</label><input type="date" id="new-task-due"></div>
+          <div id="new-task-assign-wrap" style="display:none;"><label>Assign to</label><select id="new-task-assignee"></select></div>
+          <div class="full" id="new-task-client-wrap" style="display:none;">
+            <label>Client (optional)</label>
+            <input type="text" id="new-task-client-search" placeholder="Type a name or email to link this task to a client...">
+            <input type="hidden" id="new-task-client-id" value="">
+            <div id="new-task-client-results" style="display:none;background:#fff;border:0.5px solid #d8d2c4;border-radius:6px;margin:-10px 0 14px;max-height:160px;overflow-y:auto;"></div>
+          </div>
+        </div>
+        <button class="btn-primary" id="add-task-btn" style="margin-bottom:18px;">Add task</button>
+        <p class="dash-subhead">Upcoming</p>
+        <div id="dash-tasks-upcoming" class="dash-list" style="margin-bottom:18px;"></div>
+        <p class="dash-subhead">Completed</p>
+        <div id="dash-tasks-completed" class="dash-list"></div>
+      </div>
+
+      <div class="dash-widget" id="widget-bookings">
+        <h3>Bookings</h3>
+        <div id="dash-bookings-list" class="dash-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== Bookings ============================== -->
+  <div class="admin-panel" id="panel-bookings">
+    <h1>Bookings</h1>
+    <p class="section-sub">Every inquiry and booking across all three brands.</p>
+
+    <div class="filter-bar">
+      <div>
+        <label for="f-date">Date</label>
+        <input type="date" id="f-date">
+      </div>
+      <div>
+        <label for="f-brand">Brand</label>
+        <select id="f-brand"><option value="">All brands</option></select>
+      </div>
+      <div>
+        <label for="f-status">Status</label>
+        <select id="f-status">
+          <option value="">All statuses</option>
+          <option value="inquiry">Inquiry</option>
+          <option value="booked">Booked</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </div>
+      <div><button class="btn-secondary" id="clear-filters">Clear</button></div>
+    </div>
+
+    <table class="admin-table" id="bookings-table">
+      <thead>
+        <tr>
+          <th>Date</th><th>Brand</th><th>Customer</th><th>Package</th>
+          <th>Status</th><th>Total</th><th>Deposit</th><th>Balance</th>
+        </tr>
+      </thead>
+      <tbody id="bookings-tbody"></tbody>
+    </table>
+
+    <div class="detail-panel" id="booking-detail">
+      <h3 id="detail-title" style="font-family:'Fraunces',serif;font-size:16px;font-weight:500;margin:0 0 14px;"></h3>
+      <div class="form-grid">
+        <div>
+          <label>Status</label>
+          <select id="edit-status">
+            <option value="inquiry">Inquiry</option>
+            <option value="booked">Booked</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div>
+          <label>Event date</label>
+          <input type="date" id="edit-date">
+        </div>
+        <div>
+          <label>Package</label>
+          <select id="edit-package"><option value="">No package</option></select>
+        </div>
+        <div>
+          <label>Venue</label>
+          <select id="edit-venue"><option value="">No venue set</option></select>
+        </div>
+        <div>
+          <label>Package total ($)</label>
+          <input type="number" step="0.01" id="edit-total">
+        </div>
+        <div>
+          <label>Deposit paid ($)</label>
+          <input type="number" step="0.01" id="edit-deposit">
+        </div>
+        <div class="full">
+          <label>Notes</label>
+          <textarea id="edit-notes"></textarea>
+        </div>
+        <div class="full">
+          <label>Payment options offered to the customer</label>
+          <div style="display:flex;gap:16px;margin-bottom:14px;">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="edit-allow-full" style="width:auto;margin:0;"> Full balance
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="edit-allow-retainer" style="width:auto;margin:0;"> 50% retainer
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="edit-allow-custom" style="width:auto;margin:0;"> Custom amount
+            </label>
+          </div>
+        </div>
+        <div>
+          <label>Booth type (Grin + Bear Booth only)</label>
+          <select id="edit-booth-type">
+            <option value="">Not set</option>
+            <option value="social">Social Booth</option>
+            <option value="studio">Studio Booth</option>
+          </select>
+        </div>
+        <div></div>
+        <div class="full">
+          <label>Backdrop / template selection offered to the customer</label>
+          <div style="display:flex;gap:16px;margin-bottom:14px;">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="edit-allow-backdrop" style="width:auto;margin:0;"> Backdrop picker
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="edit-allow-template" style="width:auto;margin:0;"> Template picker
+            </label>
+          </div>
+        </div>
+        <div class="full" id="detail-picks" style="font-size:13px;color:#3b5f2a;"></div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="save-booking-btn">Save changes</button>
+        <button class="btn-secondary" id="close-detail-btn">Close</button>
+      </div>
+    </div>
+
+    <div class="add-panel" id="new-booking-panel" style="display:none;">
+      <h3>New booking</h3>
+      <div id="new-booking-status" class="portal-status"></div>
+      <div class="form-grid">
+        <div>
+          <label>Brand</label>
+          <select id="bk-brand"></select>
+        </div>
+        <div>
+          <label>Event date</label>
+          <input type="date" id="bk-date">
+        </div>
+        <div>
+          <label>Event type</label>
+          <input type="text" id="bk-event-type" placeholder="e.g. wedding, corporate">
+        </div>
+        <div>
+          <label>Package (optional)</label>
+          <select id="bk-package"><option value="">No package yet</option></select>
+        </div>
+        <div>
+          <label>Venue (optional)</label>
+          <select id="bk-venue"><option value="">No venue yet</option></select>
+        </div>
+        <div class="full">
+          <label>Search saved clients</label>
+          <input type="text" id="bk-client-search" placeholder="Type a name or email to autofill an existing client...">
+          <div id="bk-client-results" style="display:none;background:#fff;border:0.5px solid #d8d2c4;border-radius:6px;margin:-10px 0 14px;max-height:160px;overflow-y:auto;"></div>
+        </div>
+        <div>
+          <label>Customer email</label>
+          <input type="email" id="bk-email" placeholder="name@email.com">
+        </div>
+        <div>
+          <label>Customer phone</label>
+          <input type="text" id="bk-phone" placeholder="optional">
+        </div>
+        <div>
+          <label>Customer first name</label>
+          <input type="text" id="bk-first-name" placeholder="optional">
+        </div>
+        <div>
+          <label>Customer last name</label>
+          <input type="text" id="bk-last-name" placeholder="optional">
+        </div>
+        <div class="full">
+          <label>Notes</label>
+          <textarea id="bk-notes" placeholder="optional"></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="add-booking-btn">Create booking</button>
+        <button class="btn-secondary" id="cancel-new-booking-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== Calendar ============================== -->
+  <div class="admin-panel" id="panel-calendar">
+    <h1>Calendar</h1>
+    <p class="section-sub">Every booking across all three brands, by event date.</p>
+
+    <div class="filter-bar">
+      <div>
+        <label for="cal-brand">Brand</label>
+        <select id="cal-brand"><option value="">All brands</option></select>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:8px;">
+        <button class="btn-secondary" id="cal-prev-btn">&larr;</button>
+        <div id="cal-month-label" style="font-family:'Fraunces',serif;font-size:15px;font-weight:500;min-width:150px;text-align:center;padding-bottom:8px;"></div>
+        <button class="btn-secondary" id="cal-next-btn">&rarr;</button>
+      </div>
+      <div><button class="btn-secondary" id="cal-today-btn">Today</button></div>
+    </div>
+
+    <div class="calendar-legend">
+      <span class="status-pill inquiry">Inquiry</span>
+      <span class="status-pill booked">Booked</span>
+      <span class="status-pill completed">Completed</span>
+      <span class="status-pill cancelled">Cancelled</span>
+    </div>
+
+    <div class="calendar-grid" id="calendar-grid"></div>
+  </div>
+
+  <!-- ============================== Leads ============================== -->
+  <div class="admin-panel" id="panel-leads">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h1>Leads</h1>
+        <p class="section-sub">Prospects working their way through the pipeline.</p>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn-secondary" id="toggle-pipeline-config-btn">Configure pipeline</button>
+        <button class="btn-secondary" id="toggle-add-lead-btn">+ Add lead</button>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <div style="flex:1;">
+        <label for="lead-search">Search</label>
+        <input type="text" id="lead-search" placeholder="Name, organization, email, or phone">
+      </div>
+      <div>
+        <label for="lead-filter-brand">Brand</label>
+        <select id="lead-filter-brand"><option value="">All brands</option></select>
+      </div>
+    </div>
+
+    <div class="add-panel" id="pipeline-config-panel" style="display:none;">
+      <h3>Pipeline stages</h3>
+      <p class="section-sub" style="margin-bottom:14px;">Add, rename, reorder, or retire the stages leads move through. A stage with leads still in it can't be deleted until they're moved out.</p>
+      <div id="pipeline-config-status" class="portal-status"></div>
+      <div id="pipeline-stage-rows"></div>
+      <div class="form-grid" style="margin-top:14px;">
+        <div><label>New stage name</label><input type="text" id="new-stage-name" placeholder="e.g. Follow-up"></div>
+        <div><label>Color</label><input type="color" id="new-stage-color" value="#3a4a60"></div>
+      </div>
+      <button class="btn-secondary" id="add-stage-btn" style="margin-top:10px;">Add stage</button>
+    </div>
+
+    <div class="add-panel" id="add-lead-panel" style="display:none;">
+      <h3>Add lead</h3>
+      <div id="add-lead-status" class="portal-status"></div>
+      <div class="form-grid">
+        <div><label>Brand</label><select id="lead-brand"></select></div>
+        <div><label>Source</label><input type="text" id="lead-source" placeholder="e.g. Website, Referral"></div>
+        <div><label>First name</label><input type="text" id="lead-first-name" placeholder="optional"></div>
+        <div><label>Last name</label><input type="text" id="lead-last-name" placeholder="optional"></div>
+        <div><label>Email</label><input type="email" id="lead-email" placeholder="optional"></div>
+        <div><label>Phone</label><input type="text" id="lead-phone" placeholder="optional"></div>
+        <div class="full"><label>Organization</label><input type="text" id="lead-organization" placeholder="optional"></div>
+        <div><label>Target event date</label><input type="date" id="lead-event-date"></div>
+        <div><label>Estimated value</label><input type="number" step="0.01" id="lead-estimated-value" placeholder="optional"></div>
+        <div id="lead-assign-wrap" style="display:none;"><label>Assign to</label><select id="lead-assignee"><option value="">Unassigned</option></select></div>
+        <div class="full" id="lead-client-wrap">
+          <label>Link to existing client (optional)</label>
+          <input type="text" id="lead-client-search" placeholder="Type a name or email to link this lead to a client...">
+          <input type="hidden" id="lead-client-id" value="">
+          <div id="lead-client-results" style="display:none;background:#fff;border:0.5px solid #d8d2c4;border-radius:6px;margin:-10px 0 14px;max-height:160px;overflow-y:auto;"></div>
+        </div>
+        <div class="full"><label>Notes</label><textarea id="lead-notes" placeholder="optional"></textarea></div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="add-lead-btn">Add lead</button>
+        <button class="btn-secondary" id="cancel-add-lead-btn">Cancel</button>
+      </div>
+    </div>
+
+    <div class="pipeline-board" id="pipeline-board"></div>
+
+    <div class="add-panel" id="lead-detail-panel" style="display:none;">
+      <h3 id="lead-detail-title">Lead</h3>
+      <div id="lead-detail-status" class="portal-status"></div>
+      <div class="form-grid">
+        <div><label>Brand</label><select id="edit-lead-brand"></select></div>
+        <div><label>Stage</label><select id="edit-lead-stage"></select></div>
+        <div><label>First name</label><input type="text" id="edit-lead-first-name"></div>
+        <div><label>Last name</label><input type="text" id="edit-lead-last-name"></div>
+        <div><label>Email</label><input type="email" id="edit-lead-email"></div>
+        <div><label>Phone</label><input type="text" id="edit-lead-phone"></div>
+        <div class="full"><label>Organization</label><input type="text" id="edit-lead-organization"></div>
+        <div><label>Target event date</label><input type="date" id="edit-lead-event-date"></div>
+        <div><label>Estimated value</label><input type="number" step="0.01" id="edit-lead-estimated-value"></div>
+        <div><label>Source</label><input type="text" id="edit-lead-source"></div>
+        <div id="edit-lead-assign-wrap" style="display:none;"><label>Assign to</label><select id="edit-lead-assignee"><option value="">Unassigned</option></select></div>
+        <div class="full"><label>Notes</label><textarea id="edit-lead-notes"></textarea></div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="save-lead-btn">Save changes</button>
+        <button class="btn-danger" id="delete-lead-btn">Delete lead</button>
+        <button class="btn-secondary" id="close-lead-detail-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== Equipment ============================== -->
+  <div class="admin-panel" id="panel-equipment">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h1>Equipment</h1>
+        <p class="section-sub">Every trackable item -- deactivating keeps history intact instead of deleting.</p>
+      </div>
+      <button class="btn-secondary" id="toggle-add-equipment-btn">+ Add equipment</button>
+    </div>
+
+    <table class="admin-table">
+      <thead><tr><th>Name</th><th>Category</th><th>Notes</th><th>Status</th><th></th></tr></thead>
+      <tbody id="equipment-tbody"></tbody>
+    </table>
+
+    <div class="add-panel" id="add-equipment-panel" style="display:none;">
+      <h3>Add equipment</h3>
+      <div class="form-grid">
+        <div><label>Name</label><input type="text" id="eq-name" placeholder="e.g. Studio Booth #2"></div>
+        <div>
+          <label>Category</label>
+          <select id="eq-category">
+            <option value="dj_gear">DJ gear</option>
+            <option value="photo_booth">Photo booth</option>
+            <option value="backdrop">Backdrop</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div class="full"><label>Notes</label><input type="text" id="eq-notes" placeholder="optional"></div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="add-equipment-btn">Add equipment</button>
+        <button class="btn-secondary" id="cancel-add-equipment-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== Packages ============================== -->
+  <div class="admin-panel" id="panel-packages">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h1>Packages</h1>
+        <p class="section-sub">What's bookable and priced on each site.</p>
+      </div>
+      <button class="btn-secondary" id="toggle-add-package-btn">+ Add package</button>
+    </div>
+
+    <table class="admin-table">
+      <thead><tr><th>Brand</th><th>Name</th><th>Category</th><th>Price</th><th>Hours</th><th>Booth</th><th>Widgets</th><th>Status</th><th></th></tr></thead>
+      <tbody id="packages-tbody"></tbody>
+    </table>
+
+    <div class="add-panel" id="add-package-panel" style="display:none;">
+      <h3 id="package-form-title">Add package</h3>
+      <div class="form-grid">
+        <div>
+          <label>Brand</label>
+          <select id="pk-brand"><option value="">Any brand</option></select>
+        </div>
+        <div><label>Name</label><input type="text" id="pk-name" placeholder="e.g. Social Booth -- 2 Hour"></div>
+        <div><label>Category</label><input type="text" id="pk-category" placeholder="e.g. photo_booth"></div>
+        <div><label>Price ($)</label><input type="number" step="0.01" id="pk-price"></div>
+        <div><label>Duration (hours)</label><input type="number" step="0.5" id="pk-duration" placeholder="optional"></div>
+        <div>
+          <label>Booth type</label>
+          <select id="pk-booth-type">
+            <option value="">Not set</option>
+            <option value="social">Social Booth</option>
+            <option value="studio">Studio Booth</option>
+          </select>
+        </div>
+        <div class="full"><label>Description</label><textarea id="pk-description"></textarea></div>
+        <div class="full">
+          <label>Backdrop / template selection for bookings using this package</label>
+          <div style="display:flex;gap:16px;margin-bottom:14px;">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="pk-allow-backdrop" style="width:auto;margin:0;" checked> Backdrop picker
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="pk-allow-template" style="width:auto;margin:0;" checked> Template picker
+            </label>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="add-package-btn">Add package</button>
+        <button class="btn-secondary" id="cancel-package-edit-btn" style="display:none;">Cancel edit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== Account details ============================== -->
+  <div class="admin-panel" id="panel-account">
+    <h1>Account details</h1>
+    <p class="section-sub">Your own name, email, and password.</p>
+
+    <div id="account-status" class="portal-status"></div>
+
+    <div class="add-panel">
+      <div class="form-grid">
+        <div><label>First name</label><input type="text" id="acct-first-name"></div>
+        <div><label>Last name</label><input type="text" id="acct-last-name"></div>
+        <div class="full"><label>Email</label><input type="email" id="acct-email"></div>
+      </div>
+      <button class="btn-primary" id="save-account-btn">Save details</button>
+    </div>
+
+    <div class="add-panel">
+      <h3>Change password</h3>
+      <div class="form-grid">
+        <div><label>Current password</label><input type="password" id="acct-current-password"></div>
+        <div></div>
+        <div><label>New password</label><input type="password" id="acct-new-password"></div>
+        <div><label>Confirm new password</label><input type="password" id="acct-confirm-password"></div>
+      </div>
+      <button class="btn-primary" id="save-password-btn">Change password</button>
+    </div>
+  </div>
+
+  <!-- ============================== Company settings ============================== -->
+  <div class="admin-panel" id="panel-company">
+    <h1>Company settings</h1>
+    <p class="section-sub">Branding for each brand -- logo, name, and accent color. The myplanningportal brand controls the logo shown here in Admin and on the customer login/dashboard.</p>
+
+    <div id="branding-cards"></div>
+
+    <div class="add-panel" id="add-brand-panel" style="display:none;">
+      <h3>Add a brand</h3>
+      <div id="add-brand-status" class="portal-status"></div>
+      <div class="form-grid">
+        <div><label>Brand name</label><input type="text" id="new-brand-name" placeholder="e.g. Snap Booth Co"></div>
+        <div><label>Slug</label><input type="text" id="new-brand-slug" placeholder="letters, numbers, dashes -- e.g. snap-booth-co"></div>
+        <div class="full"><label>Portal domain (optional)</label><input type="text" id="new-brand-domain" placeholder="e.g. portal.snapboothco.com"></div>
+      </div>
+      <button class="btn-primary" id="add-brand-btn">Add brand</button>
+    </div>
+  </div>
+
+  <!-- ============================== Staff ============================== -->
+  <div class="admin-panel" id="panel-staff">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h1>Staff</h1>
+        <p class="section-sub">Everyone with access to this admin site.</p>
+      </div>
+      <button class="btn-secondary" id="toggle-add-staff-btn">+ Add staff</button>
+    </div>
+
+    <div id="staff-status" class="portal-status"></div>
+
+    <div class="filter-bar">
+      <div style="flex:1;">
+        <label for="staff-search">Search</label>
+        <input type="text" id="staff-search" placeholder="Name or email">
+      </div>
+      <div>
+        <label for="staff-hide-inactive">&nbsp;</label>
+        <label style="display:flex;align-items:center;gap:6px;height:38px;font-size:13px;font-weight:400;">
+          <input type="checkbox" id="staff-hide-inactive" style="width:auto;margin:0;">
+          Hide inactive
+        </label>
+      </div>
+    </div>
+
+    <table class="admin-table">
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead>
+      <tbody id="staff-tbody"></tbody>
+    </table>
+
+    <div class="add-panel" id="add-staff-panel" style="display:none;">
+      <h3 id="staff-form-title">Add staff</h3>
+      <div class="form-grid">
+        <div><label>First name</label><input type="text" id="sf-first-name" placeholder="optional"></div>
+        <div><label>Last name</label><input type="text" id="sf-last-name" placeholder="optional"></div>
+        <div><label>Email</label><input type="email" id="sf-email"></div>
+        <div>
+          <label>Role</label>
+          <select id="sf-role"></select>
+        </div>
+        <div class="full"><label id="sf-password-label">Password</label><input type="password" id="sf-password" placeholder="At least 8 characters"></div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="add-staff-btn">Add staff</button>
+        <button class="btn-secondary" id="cancel-staff-edit-btn" style="display:none;">Cancel edit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== Clients ============================== -->
+  <div class="admin-panel" id="panel-clients">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h1>Clients</h1>
+        <p class="section-sub">Saved contact info you can reuse when starting a new booking.</p>
+      </div>
+      <button class="btn-secondary" id="toggle-add-client-btn">+ Add client</button>
+    </div>
+
+    <div class="filter-bar">
+      <div style="flex:1;">
+        <label for="client-search">Search</label>
+        <input type="text" id="client-search" placeholder="Name, organization, email, or phone">
+      </div>
+    </div>
+
+    <table class="admin-table">
+      <thead><tr><th>Name</th><th>Organization</th><th>Email</th><th>Phone</th><th></th></tr></thead>
+      <tbody id="clients-tbody"></tbody>
+    </table>
+
+    <div class="detail-panel" id="client-detail">
+      <h3 id="client-detail-title" style="font-family:'Fraunces',serif;font-size:16px;font-weight:500;margin:0 0 14px;"></h3>
+      <div class="form-grid">
+        <div><label>First name</label><input type="text" id="edit-client-first-name"></div>
+        <div><label>Last name</label><input type="text" id="edit-client-last-name"></div>
+        <div><label>Email</label><input type="email" id="edit-client-email"></div>
+        <div><label>Phone</label><input type="text" id="edit-client-phone"></div>
+        <div class="full"><label>Organization</label><input type="text" id="edit-client-organization" placeholder="optional"></div>
+      </div>
+      <div style="display:flex;gap:10px;margin-bottom:20px;">
+        <button class="btn-primary" id="save-client-btn">Save changes</button>
+        <button class="btn-secondary" id="close-client-detail-btn">Close</button>
+      </div>
+
+      <p class="dash-subhead">Upcoming events</p>
+      <div id="client-upcoming-events" class="dash-list" style="margin-bottom:20px;"></div>
+
+      <p class="dash-subhead">Past events</p>
+      <div id="client-past-events" class="dash-list" style="margin-bottom:20px;"></div>
+
+      <p class="dash-subhead">Assigned tasks</p>
+      <div id="client-tasks-list" class="dash-list" style="margin-bottom:12px;"></div>
+      <div id="client-task-status" class="portal-status"></div>
+      <div class="form-grid" style="margin-bottom:10px;">
+        <div class="full"><label>New task</label><input type="text" id="client-task-title" placeholder="Task title"></div>
+        <div><label>Due date</label><input type="date" id="client-task-due"></div>
+        <div id="client-task-assign-wrap" style="display:none;"><label>Assign to</label><select id="client-task-assignee"></select></div>
+      </div>
+      <button class="btn-secondary" id="add-client-task-btn" style="margin-bottom:20px;">Add task</button>
+
+      <p class="dash-subhead">CRM &ndash; contact log</p>
+      <div id="client-contacts-list" class="dash-list" style="margin-bottom:14px;"></div>
+      <div id="add-contact-status" class="portal-status"></div>
+      <div class="form-grid">
+        <div>
+          <label>Contact type</label>
+          <select id="new-contact-type">
+            <option value="call">Call</option>
+            <option value="email">Email</option>
+            <option value="meeting">Meeting</option>
+            <option value="note">Note</option>
+          </select>
+        </div>
+        <div><label>When</label><input type="datetime-local" id="new-contact-when"></div>
+        <div class="full"><label>Notes</label><textarea id="new-contact-notes" placeholder="What was discussed..."></textarea></div>
+      </div>
+      <button class="btn-secondary" id="add-contact-btn">Log contact</button>
+    </div>
+
+    <div class="add-panel" id="add-client-panel" style="display:none;">
+      <h3>Add client</h3>
+      <div id="add-client-status" class="portal-status"></div>
+      <div class="form-grid">
+        <div><label>First name</label><input type="text" id="new-client-first-name" placeholder="optional"></div>
+        <div><label>Last name</label><input type="text" id="new-client-last-name" placeholder="optional"></div>
+        <div><label>Email</label><input type="email" id="new-client-email"></div>
+        <div><label>Phone</label><input type="text" id="new-client-phone" placeholder="optional"></div>
+        <div class="full"><label>Organization</label><input type="text" id="new-client-organization" placeholder="optional"></div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="add-client-btn">Add client</button>
+        <button class="btn-secondary" id="cancel-add-client-btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================== Venues ============================== -->
+  <div class="admin-panel" id="panel-venues">
+    <h1>Venues</h1>
+    <p class="section-sub">Saved venue info you can reuse across bookings.</p>
+
+    <table class="admin-table">
+      <thead><tr><th>Name</th><th>City, state</th><th>Contact</th><th>Status</th><th></th></tr></thead>
+      <tbody id="venues-tbody"></tbody>
+    </table>
+
+    <div class="add-panel">
+      <h3 id="venue-form-title">Add venue</h3>
+      <div id="venue-form-status" class="portal-status"></div>
+      <div class="form-grid">
+        <div class="full"><label>Name</label><input type="text" id="vn-name" placeholder="e.g. The Grand Hall"></div>
+        <div class="full"><label>Address</label><input type="text" id="vn-address" placeholder="optional"></div>
+        <div><label>City</label><input type="text" id="vn-city" placeholder="optional"></div>
+        <div><label>State</label><input type="text" id="vn-state" placeholder="optional"></div>
+        <div><label>ZIP</label><input type="text" id="vn-zip" placeholder="optional"></div>
+        <div></div>
+        <div><label>Contact name</label><input type="text" id="vn-contact-name" placeholder="optional"></div>
+        <div><label>Contact phone</label><input type="text" id="vn-contact-phone" placeholder="optional"></div>
+        <div class="full"><label>Contact email</label><input type="email" id="vn-contact-email" placeholder="optional"></div>
+        <div class="full"><label>Notes</label><textarea id="vn-notes"></textarea></div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="add-venue-btn">Add venue</button>
+        <button class="btn-secondary" id="cancel-venue-edit-btn" style="display:none;">Cancel edit</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="admin-config.js"></script>
+<script>
+  // -------------------------------------------------------------------
+  // Auth / session
+  // -------------------------------------------------------------------
+  function getSession() {
+    try {
+      const raw = localStorage.getItem("mpp_staff_session");
+      return raw ? JSON.parse(raw) : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function clearSessionAndRedirect() {
+    localStorage.removeItem("mpp_staff_session");
+    window.location.replace("/admin-login.html");
+  }
+
+  const session = getSession();
+  if (!session || !session.token) {
+    clearSessionAndRedirect();
+  }
+
+  async function authFetch(path, options) {
+    options = options || {};
+    options.headers = Object.assign({}, options.headers, {
+      authorization: "Bearer " + session.token
+    });
+    const resp = await fetch(API_BASE_URL + path, options);
+    if (resp.status === 401) {
+      clearSessionAndRedirect();
+      throw new Error("Session expired");
+    }
+    return resp;
+  }
+
+  // -------------------------------------------------------------------
+  // Roles -- employee < sales < admin < super_admin. Mirrors the same
+  // hierarchy enforced server-side in auth.js/worker-index.js/staff.js;
+  // this copy only controls what's *shown*, the API is the real gate.
+  // -------------------------------------------------------------------
+  const ROLE_RANK = { employee: 0, sales: 1, admin: 2, super_admin: 3 };
+  const ROLE_LABELS = { employee: "Employee", sales: "Sales Person", admin: "Admin", super_admin: "Super Admin" };
+
+  function roleAtLeast(role, min) {
+    return (ROLE_RANK[role] ?? -1) >= (ROLE_RANK[min] ?? Infinity);
+  }
+  function roleLabel(r) { return ROLE_LABELS[r] || r; }
+  function canManageRoleClient(actorRole, targetRole) {
+    if (actorRole === "super_admin") return true;
+    if (actorRole === "admin") return targetRole === "sales" || targetRole === "employee";
+    return false;
+  }
+
+  const myRole = session.staff.role || "employee";
+  const canEditBookings = roleAtLeast(myRole, "sales");
+  const canSeeEquipment = myRole !== "sales";
+  const canEditEquipment = roleAtLeast(myRole, "admin");
+  const canSeePackages = myRole !== "employee";
+  const canEditPackages = roleAtLeast(myRole, "admin");
+  const canSeeVenuesClients = roleAtLeast(myRole, "sales");
+  const canSeeStaff = roleAtLeast(myRole, "admin");
+  const canEditBranding = roleAtLeast(myRole, "admin");
+  const canAssignTasks = roleAtLeast(myRole, "admin");
+  const canConfigurePipeline = roleAtLeast(myRole, "admin");
+  const isSuperAdmin = myRole === "super_admin";
+
+  function applyRoleVisibility() {
+    if (!canEditBranding) {
+      const b = document.querySelector('.dropdown-item[data-tab="company"]');
+      if (b) b.style.display = "none";
+    }
+    if (!canSeeEquipment) {
+      const t = document.querySelector('.admin-tab[data-tab="equipment"]');
+      if (t) t.style.display = "none";
+    }
+    if (!canSeePackages) {
+      const t = document.querySelector('.admin-tab[data-tab="packages"]');
+      if (t) t.style.display = "none";
+    }
+    if (!canSeeVenuesClients) {
+      const c = document.querySelector('.dropdown-item[data-tab="clients"]');
+      const v = document.querySelector('.dropdown-item[data-tab="venues"]');
+      const l = document.querySelector('.admin-tab[data-tab="leads"]');
+      if (c) c.style.display = "none";
+      if (v) v.style.display = "none";
+      if (l) l.style.display = "none";
+    }
+    if (!canConfigurePipeline) {
+      document.getElementById("toggle-pipeline-config-btn").style.display = "none";
+    }
+    if (!canSeeStaff) {
+      const s = document.querySelector('.dropdown-item[data-tab="staff"]');
+      if (s) s.style.display = "none";
+    }
+    if (!canEditEquipment) {
+      document.getElementById("toggle-add-equipment-btn").style.display = "none";
+    }
+    if (!canEditPackages) {
+      document.getElementById("toggle-add-package-btn").style.display = "none";
+    }
+    if (!canEditBookings) {
+      // Employees are view-only on bookings -- hide the whole + menu
+      // rather than just the form it opens, since there's nothing else in
+      // it right now.
+      document.getElementById("add-menu-wrap").style.display = "none";
+    }
+    if (canAssignTasks) {
+      document.getElementById("new-task-assign-wrap").style.display = "";
+      document.getElementById("client-task-assign-wrap").style.display = "";
+      document.getElementById("lead-assign-wrap").style.display = "";
+      document.getElementById("edit-lead-assign-wrap").style.display = "";
+    }
+    if (canSeeVenuesClients) {
+      document.getElementById("new-task-client-wrap").style.display = "";
+    }
+  }
+  applyRoleVisibility();
+
+  document.getElementById("who-name").textContent =
+    (session.staff.first_name ? session.staff.first_name + " " : "") + (session.staff.last_name || session.staff.email);
+  document.getElementById("who-role").textContent = roleLabel(myRole);
+
+  document.getElementById("logout-btn").addEventListener("click", async function () {
+    try {
+      await authFetch("/api/auth/logout", { method: "POST" });
+    } catch (err) { /* already redirected on 401, or ignore network errors */ }
+    clearSessionAndRedirect();
+  });
+
+  // -------------------------------------------------------------------
+  // Tabs + settings dropdown (both just switch which panel shows)
+  // -------------------------------------------------------------------
+  function showPanel(name) {
+    document.querySelectorAll(".admin-tab").forEach(function (t) { t.classList.remove("active"); });
+    document.querySelectorAll(".admin-panel").forEach(function (p) { p.classList.remove("active"); });
+    const tabBtn = document.querySelector('.admin-tab[data-tab="' + name + '"]');
+    if (tabBtn) tabBtn.classList.add("active");
+    document.getElementById("panel-" + name).classList.add("active");
+  }
+
+  document.querySelectorAll(".admin-tab").forEach(function (tab) {
+    tab.addEventListener("click", function () { showPanel(tab.dataset.tab); });
+  });
+
+  // Only wires up items that switch tabs (data-tab) -- other dropdown
+  // items, like "New booking" in the + menu, get their own specific
+  // handler elsewhere instead of this generic one.
+  document.querySelectorAll(".dropdown-item[data-tab]").forEach(function (item) {
+    item.addEventListener("click", function () {
+      showPanel(item.dataset.tab);
+      document.getElementById("settings-menu").classList.remove("open");
+    });
+  });
+
+  document.getElementById("settings-toggle-btn").addEventListener("click", function (e) {
+    e.stopPropagation();
+    document.getElementById("settings-menu").classList.toggle("open");
+  });
+
+  document.getElementById("who-toggle-btn").addEventListener("click", function (e) {
+    e.stopPropagation();
+    document.getElementById("who-menu").classList.toggle("open");
+  });
+
+  document.getElementById("add-menu-toggle-btn").addEventListener("click", function (e) {
+    e.stopPropagation();
+    document.getElementById("add-menu").classList.toggle("open");
+  });
+
+  function openNewBookingForm() {
+    document.getElementById("add-menu").classList.remove("open");
+    showPanel("bookings");
+    const panel = document.getElementById("new-booking-panel");
+    panel.style.display = "block";
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  document.getElementById("add-menu-new-booking").addEventListener("click", openNewBookingForm);
+
+  function openNewTaskForm() {
+    document.getElementById("add-menu").classList.remove("open");
+    showPanel("home");
+    const widget = document.getElementById("widget-tasks");
+    widget.classList.add("show");
+    widget.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    document.getElementById("new-task-title").focus();
+  }
+  document.getElementById("add-menu-new-task").addEventListener("click", openNewTaskForm);
+
+  document.getElementById("cancel-new-booking-btn").addEventListener("click", function () {
+    document.getElementById("new-booking-panel").style.display = "none";
+  });
+
+  document.addEventListener("click", function () {
+    document.getElementById("settings-menu").classList.remove("open");
+    document.getElementById("add-menu").classList.remove("open");
+    document.getElementById("who-menu").classList.remove("open");
+  });
+
+  // -------------------------------------------------------------------
+  // Account details
+  // -------------------------------------------------------------------
+  function showAccountStatus(kind, message) {
+    const el = document.getElementById("account-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  async function loadAccount() {
+    const resp = await authFetch("/api/staff/me");
+    const me = await resp.json();
+    document.getElementById("acct-first-name").value = me.first_name || "";
+    document.getElementById("acct-last-name").value = me.last_name || "";
+    document.getElementById("acct-email").value = me.email || "";
+    if (me.dashboard_prefs) {
+      dashboardPrefs = me.dashboard_prefs;
+      applyDashboardVisibility();
+    }
+  }
+
+  document.getElementById("save-account-btn").addEventListener("click", async function () {
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/staff/me", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          first_name: document.getElementById("acct-first-name").value.trim(),
+          last_name: document.getElementById("acct-last-name").value.trim(),
+          email: document.getElementById("acct-email").value.trim()
+        })
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        showAccountStatus("error", (data && data.error) || "Couldn't save.");
+        return;
+      }
+      showAccountStatus("success", "Saved.");
+      document.getElementById("who-name").textContent =
+        (document.getElementById("acct-first-name").value ? document.getElementById("acct-first-name").value + " " : "") +
+        document.getElementById("acct-last-name").value;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("save-password-btn").addEventListener("click", async function () {
+    const current = document.getElementById("acct-current-password").value;
+    const next = document.getElementById("acct-new-password").value;
+    const confirmVal = document.getElementById("acct-confirm-password").value;
+    if (!current || !next) {
+      showAccountStatus("error", "Fill in both password fields.");
+      return;
+    }
+    if (next !== confirmVal) {
+      showAccountStatus("error", "New passwords don't match.");
+      return;
+    }
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/staff/me", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ current_password: current, new_password: next })
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        showAccountStatus("error", (data && data.error) || "Couldn't change password.");
+        return;
+      }
+      showAccountStatus("success", "Password changed.");
+      document.getElementById("acct-current-password").value = "";
+      document.getElementById("acct-new-password").value = "";
+      document.getElementById("acct-confirm-password").value = "";
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // -------------------------------------------------------------------
+  // Home dashboard -- customizable widgets: Calendar (leads & bookings),
+  // Tasks (upcoming & completed), Bookings. Which widgets show is a
+  // per-staffer preference saved server-side on their own account
+  // (dashboard_prefs, via the existing /api/staff/me self-service
+  // endpoint), so it follows them to any device they sign in on.
+  // -------------------------------------------------------------------
+  let dashboardPrefs = { calendar: true, tasks: true, bookings: true };
+  let myTasksCache = [];
+
+  function applyDashboardVisibility() {
+    document.getElementById("show-widget-calendar").checked = !!dashboardPrefs.calendar;
+    document.getElementById("show-widget-tasks").checked = !!dashboardPrefs.tasks;
+    document.getElementById("show-widget-bookings").checked = !!dashboardPrefs.bookings;
+    document.getElementById("widget-calendar").classList.toggle("show", !!dashboardPrefs.calendar);
+    document.getElementById("widget-tasks").classList.toggle("show", !!dashboardPrefs.tasks);
+    document.getElementById("widget-bookings").classList.toggle("show", !!dashboardPrefs.bookings);
+  }
+
+  document.getElementById("customize-home-btn").addEventListener("click", function (e) {
+    e.stopPropagation();
+    document.getElementById("customize-panel").classList.toggle("open");
+  });
+
+  ["calendar", "tasks", "bookings"].forEach(function (key) {
+    document.getElementById("show-widget-" + key).addEventListener("change", async function () {
+      dashboardPrefs[key] = this.checked;
+      applyDashboardVisibility();
+      await authFetch("/api/staff/me", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ dashboard_prefs: dashboardPrefs })
+      });
+    });
+  });
+
+  function dashEmptyRow(message) {
+    return '<div class="empty-state" style="padding:20px 0;">' + message + '</div>';
+  }
+
+  // Calendar widget -- a real monthly grid (same layout/markup as the full
+  // Calendar tab), covering every lead and booking, navigable month to
+  // month. Clicking an event doesn't do the in-page accordion thing the
+  // Bookings tab does -- it opens that booking's own page in a new tab, so
+  // you can pull up several at once and compare, or keep the dashboard
+  // where it is while you work on one.
+  let dashCalendarBookingsCache = [];
+  let dashCalendarViewDate = new Date();
+
+  function wireDashCalendarPillClicks(root) {
+    root.querySelectorAll(".cal-booking-pill").forEach(function (el) {
+      el.addEventListener("click", function () {
+        window.open("booking-detail.html?id=" + el.dataset.id, "_blank");
+      });
+    });
+  }
+
+  async function loadDashCalendar() {
+    const resp = await authFetch("/api/bookings");
+    const rows = await resp.json();
+    dashCalendarBookingsCache = Array.isArray(rows) ? rows : [];
+    renderDashCalendar();
+  }
+
+  function renderDashCalendar() {
+    const year = dashCalendarViewDate.getFullYear();
+    const month = dashCalendarViewDate.getMonth();
+    document.getElementById("dash-cal-month-label").textContent = MONTH_NAMES[month] + " " + year;
+
+    const startDow = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+    const todayStr = isoDate(new Date());
+
+    const byDate = {};
+    dashCalendarBookingsCache.forEach(function (b) {
+      if (!byDate[b.event_date]) byDate[b.event_date] = [];
+      byDate[b.event_date].push(b);
+    });
+
+    const totalCells = Math.ceil((startDow + daysInMonth) / 7) * 7;
+    const cells = [];
+    for (let i = 0; i < totalCells; i++) {
+      const dayNum = i - startDow + 1;
+      let cellDate, otherMonth = false;
+      if (dayNum < 1) {
+        cellDate = new Date(year, month - 1, daysInPrevMonth + dayNum);
+        otherMonth = true;
+      } else if (dayNum > daysInMonth) {
+        cellDate = new Date(year, month + 1, dayNum - daysInMonth);
+        otherMonth = true;
+      } else {
+        cellDate = new Date(year, month, dayNum);
+      }
+      const dateStr = isoDate(cellDate);
+      cells.push({
+        dateStr: dateStr,
+        dayLabel: cellDate.getDate(),
+        otherMonth: otherMonth,
+        isToday: dateStr === todayStr,
+        bookings: byDate[dateStr] || []
+      });
+    }
+
+    let html = DOW_LABELS.map(function (d) { return '<div class="cal-dow">' + d + "</div>"; }).join("");
+
+    html += cells.map(function (c) {
+      const visible = c.bookings.slice(0, 3);
+      const overflow = c.bookings.length - visible.length;
+      const pills = visible.map(bookingPillHtml).join("");
+      const more = overflow > 0 ? '<div class="cal-more" data-date="' + c.dateStr + '">+' + overflow + " more</div>" : "";
+      const classes = "cal-day" + (c.otherMonth ? " other-month" : "") + (c.isToday ? " today" : "");
+      return (
+        '<div class="' + classes + '" data-date="' + c.dateStr + '">' +
+          '<div class="cal-day-num">' + c.dayLabel + "</div>" +
+          '<div class="cal-day-bookings">' + pills + more + "</div>" +
+        "</div>"
+      );
+    }).join("");
+
+    const grid = document.getElementById("dash-calendar-grid");
+    grid.innerHTML = html;
+    wireDashCalendarPillClicks(grid);
+
+    grid.querySelectorAll(".cal-more").forEach(function (el) {
+      el.addEventListener("click", function () {
+        const dateStr = el.dataset.date;
+        const cell = grid.querySelector('.cal-day[data-date="' + dateStr + '"]');
+        if (!cell) return;
+        const dayBookings = dashCalendarBookingsCache.filter(function (b) { return b.event_date === dateStr; });
+        const box = cell.querySelector(".cal-day-bookings");
+        box.innerHTML = dayBookings.map(bookingPillHtml).join("");
+        wireDashCalendarPillClicks(box);
+      });
+    });
+  }
+
+  document.getElementById("dash-cal-prev-btn").addEventListener("click", function () {
+    dashCalendarViewDate = new Date(dashCalendarViewDate.getFullYear(), dashCalendarViewDate.getMonth() - 1, 1);
+    renderDashCalendar();
+  });
+  document.getElementById("dash-cal-next-btn").addEventListener("click", function () {
+    dashCalendarViewDate = new Date(dashCalendarViewDate.getFullYear(), dashCalendarViewDate.getMonth() + 1, 1);
+    renderDashCalendar();
+  });
+  document.getElementById("dash-cal-today-btn").addEventListener("click", function () {
+    dashCalendarViewDate = new Date();
+    renderDashCalendar();
+  });
+
+  // Bookings widget -- most recent activity across every brand, regardless
+  // of date, so it surfaces things that just came in or changed.
+  async function loadDashBookings() {
+    const resp = await authFetch("/api/bookings?limit=5");
+    const rows = await resp.json();
+    const box = document.getElementById("dash-bookings-list");
+    if (!Array.isArray(rows) || rows.length === 0) {
+      box.innerHTML = dashEmptyRow("No bookings yet.");
+      return;
+    }
+    box.innerHTML = rows.map(function (b) {
+      const customerName = (b.customer_first_name || b.customer_last_name)
+        ? ((b.customer_first_name || "") + " " + (b.customer_last_name || "")).trim()
+        : (b.customer_email || "--");
+      return (
+        '<div class="dash-row">' +
+          '<div class="dash-row-main">' +
+            '<span class="dash-row-title">' + customerName + "</span>" +
+            '<span class="dash-row-meta">' + (b.brand_name || "") + " -- " + b.event_date + "</span>" +
+          "</div>" +
+          '<span class="status-pill ' + b.status + '">' + b.status + "</span>" +
+        "</div>"
+      );
+    }).join("");
+  }
+
+  function fillAssigneeSelect(selectId, unassignedLabel) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    const active = staffCache.filter(function (s) { return s.is_active; });
+    select.innerHTML = ['<option value="">' + (unassignedLabel || "Myself") + "</option>"].concat(
+      active.map(function (s) {
+        const name = ((s.first_name || "") + " " + (s.last_name || "")).trim() || s.email;
+        return '<option value="' + s.id + '">' + name + "</option>";
+      })
+    ).join("");
+  }
+
+  function populateTaskAssignee() {
+    if (!canAssignTasks) return;
+    fillAssigneeSelect("new-task-assignee");
+    fillAssigneeSelect("client-task-assignee");
+  }
+
+  function showDashTaskStatus(kind, message) {
+    const el = document.getElementById("dash-task-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  function taskRowHtml(t) {
+    const isDone = t.status === "completed";
+    let meta = t.due_date ? "Due " + t.due_date : "No due date";
+    if (t.customer_first_name || t.customer_last_name || t.customer_email) {
+      const clientLabel = ((t.customer_first_name || "") + " " + (t.customer_last_name || "")).trim() || t.customer_email;
+      meta += " -- " + clientLabel;
+    }
+    return (
+      '<div class="dash-row' + (isDone ? " completed" : "") + '" data-task-id="' + t.id + '">' +
+        '<label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">' +
+          '<input type="checkbox" data-task-toggle="' + t.id + '" ' + (isDone ? "checked" : "") + '>' +
+          '<span class="dash-row-main">' +
+            '<span class="dash-row-title">' + t.title + "</span>" +
+            '<span class="dash-row-meta">' + meta + "</span>" +
+          "</span>" +
+        "</label>" +
+        '<div class="dash-row-actions">' +
+          '<button class="btn-danger" data-task-delete="' + t.id + '">Delete</button>' +
+        "</div>" +
+      "</div>"
+    );
+  }
+
+  function renderDashTasks() {
+    const upcoming = myTasksCache.filter(function (t) { return t.status === "pending"; });
+    const completed = myTasksCache.filter(function (t) { return t.status === "completed"; })
+      .sort(function (a, b) { return (b.completed_at || "").localeCompare(a.completed_at || ""); });
+
+    const upcomingBox = document.getElementById("dash-tasks-upcoming");
+    const completedBox = document.getElementById("dash-tasks-completed");
+    upcomingBox.innerHTML = upcoming.length ? upcoming.map(taskRowHtml).join("") : dashEmptyRow("Nothing on your plate.");
+    completedBox.innerHTML = completed.length ? completed.map(taskRowHtml).join("") : dashEmptyRow("Nothing completed yet.");
+
+    document.querySelectorAll("[data-task-toggle]").forEach(function (input) {
+      input.addEventListener("change", async function () {
+        const id = this.dataset.taskToggle;
+        await authFetch("/api/tasks/" + id, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status: this.checked ? "completed" : "pending" })
+        });
+        loadDashTasks();
+      });
+    });
+    document.querySelectorAll("[data-task-delete]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        await authFetch("/api/tasks/" + btn.dataset.taskDelete, { method: "DELETE" });
+        loadDashTasks();
+      });
+    });
+  }
+
+  async function loadDashTasks() {
+    const resp = await authFetch("/api/tasks");
+    const rows = await resp.json();
+    myTasksCache = Array.isArray(rows) ? rows : [];
+    renderDashTasks();
+  }
+
+  // Client typeahead for the "New task" form -- same search-and-pick
+  // pattern as the new-booking form's client search, but it stores the
+  // picked client's id in a hidden field instead of autofilling contact
+  // fields. Only wired up for sales+ (the client-wrap is hidden otherwise).
+  if (canSeeVenuesClients) {
+    let newTaskClientSearchTimer = null;
+    document.getElementById("new-task-client-search").addEventListener("input", function () {
+      const q = this.value.trim();
+      document.getElementById("new-task-client-id").value = "";
+      const resultsBox = document.getElementById("new-task-client-results");
+      clearTimeout(newTaskClientSearchTimer);
+      if (!q) {
+        resultsBox.style.display = "none";
+        resultsBox.innerHTML = "";
+        return;
+      }
+      newTaskClientSearchTimer = setTimeout(async function () {
+        const resp = await authFetch("/api/customers?search=" + encodeURIComponent(q));
+        const rows = await resp.json();
+        if (!Array.isArray(rows) || rows.length === 0) {
+          resultsBox.style.display = "none";
+          resultsBox.innerHTML = "";
+          return;
+        }
+        resultsBox.innerHTML = rows.map(function (c) {
+          return (
+            '<div data-id="' + c.id + '" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:0.5px solid #eee6d6;">' +
+              (clientName(c) || c.email) + " -- " + (c.email || "") +
+            "</div>"
+          );
+        }).join("");
+        resultsBox.style.display = "block";
+        resultsBox.querySelectorAll("[data-id]").forEach(function (row) {
+          row.addEventListener("click", function () {
+            const c = rows.find(function (x) { return x.id === Number(row.dataset.id); });
+            if (!c) return;
+            document.getElementById("new-task-client-id").value = c.id;
+            document.getElementById("new-task-client-search").value = clientName(c) || c.email || "";
+            resultsBox.style.display = "none";
+            resultsBox.innerHTML = "";
+          });
+        });
+      }, 300);
+    });
+  }
+
+  document.getElementById("add-task-btn").addEventListener("click", async function () {
+    const title = document.getElementById("new-task-title").value.trim();
+    if (!title) { showDashTaskStatus("error", "Give the task a title first."); return; }
+
+    const payload = { title: title, due_date: document.getElementById("new-task-due").value || null };
+    if (canAssignTasks) {
+      const assignee = document.getElementById("new-task-assignee").value;
+      if (assignee) payload.assigned_to = Number(assignee);
+    }
+    if (canSeeVenuesClients) {
+      const clientId = document.getElementById("new-task-client-id").value;
+      if (clientId) payload.customer_id = Number(clientId);
+    }
+
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/tasks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        showDashTaskStatus("error", (data && data.error) || "Couldn't add that task.");
+        return;
+      }
+      document.getElementById("dash-task-status").className = "portal-status";
+      document.getElementById("new-task-title").value = "";
+      document.getElementById("new-task-due").value = "";
+      if (canAssignTasks) document.getElementById("new-task-assignee").value = "";
+      if (canSeeVenuesClients) {
+        document.getElementById("new-task-client-search").value = "";
+        document.getElementById("new-task-client-id").value = "";
+      }
+      // A task assigned to someone else won't show in MY list -- only
+      // refresh here if it's still going to be mine.
+      if (!payload.assigned_to) loadDashTasks();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // -------------------------------------------------------------------
+  // Branding
+  // -------------------------------------------------------------------
+  function brandingStatusId(brandId) { return "brand-status-" + brandId; }
+
+  function showBrandingStatus(brandId, kind, message) {
+    const el = document.getElementById(brandingStatusId(brandId));
+    if (!el) return;
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  function renderBrandingCards() {
+    const container = document.getElementById("branding-cards");
+    if (!container) return;
+
+    if (!canEditBranding) {
+      container.innerHTML = '<div class="empty-state">Only Admins and the Super Admin can edit branding.</div>';
+      return;
+    }
+
+    container.innerHTML = brandsCache.map(function (b) {
+      const logoInner = b.logo_url
+        ? '<img src="' + API_BASE_URL + b.logo_url + '" alt="' + b.display_name + ' logo">'
+        : '<span>No logo yet</span>';
+      const color = b.primary_color || "#0e1a2b";
+      const isPrimaryBrand = b.slug === "rgml";
+      const deleteBtn = (isSuperAdmin && !isPrimaryBrand)
+        ? '<button class="btn-danger" data-delete-brand="' + b.id + '">Delete brand</button>'
+        : "";
+      return (
+        '<div class="branding-card" data-brand-id="' + b.id + '">' +
+          '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">' +
+            "<h3>" + b.display_name + " <span style=\"font-weight:400;color:#6b6355;font-size:12px;\">(" + b.slug + ")</span></h3>" +
+            deleteBtn +
+          "</div>" +
+          '<div id="' + brandingStatusId(b.id) + '" class="portal-status"></div>' +
+          '<div class="logo-row">' +
+            '<div class="logo-preview' + (b.logo_url ? "" : " empty") + '">' + logoInner + "</div>" +
+            '<div>' +
+              '<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" data-logo-file="' + b.id + '">' +
+              '<button class="btn-secondary" data-upload-logo="' + b.id + '" style="margin-top:6px;">Upload logo</button>' +
+            "</div>" +
+          "</div>" +
+          '<div class="form-grid">' +
+            '<div><label>Display name</label><input type="text" value="' + b.display_name.replace(/"/g, "&quot;") + '" data-brand-name="' + b.id + '"></div>' +
+            '<div>' +
+              "<label>Primary color</label>" +
+              '<div class="color-row">' +
+                '<input type="color" value="' + color + '" data-brand-color-picker="' + b.id + '">' +
+                '<input type="text" value="' + color + '" data-brand-color-text="' + b.id + '" placeholder="#0e1a2b">' +
+              "</div>" +
+            "</div>" +
+          "</div>" +
+          '<button class="btn-primary" data-save-brand="' + b.id + '" style="margin-top:10px;">Save details</button>' +
+        "</div>"
+      );
+    }).join("");
+
+    container.querySelectorAll("[data-brand-color-picker]").forEach(function (picker) {
+      picker.addEventListener("input", function () {
+        const id = picker.dataset.brandColorPicker;
+        const textInput = container.querySelector('[data-brand-color-text="' + id + '"]');
+        if (textInput) textInput.value = picker.value;
+      });
+    });
+
+    container.querySelectorAll("[data-upload-logo]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        const brandId = btn.dataset.uploadLogo;
+        const fileInput = container.querySelector('[data-logo-file="' + brandId + '"]');
+        const file = fileInput && fileInput.files && fileInput.files[0];
+        if (!file) {
+          showBrandingStatus(brandId, "error", "Choose an image file first.");
+          return;
+        }
+        btn.disabled = true;
+        btn.textContent = "Uploading...";
+        try {
+          const resp = await authFetch("/api/brands/" + brandId + "/logo", {
+            method: "POST",
+            headers: { "content-type": file.type },
+            body: file
+          });
+          const data = await resp.json().catch(function () { return null; });
+          if (!resp.ok) {
+            showBrandingStatus(brandId, "error", (data && data.error) || "Couldn't upload that logo.");
+            return;
+          }
+          showBrandingStatus(brandId, "success", "Logo updated.");
+          await loadBrands();
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Upload logo";
+        }
+      });
+    });
+
+    container.querySelectorAll("[data-save-brand]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        const brandId = btn.dataset.saveBrand;
+        const nameInput = container.querySelector('[data-brand-name="' + brandId + '"]');
+        const colorInput = container.querySelector('[data-brand-color-text="' + brandId + '"]');
+        const name = nameInput.value.trim();
+        const color = colorInput.value.trim();
+
+        if (!name) {
+          showBrandingStatus(brandId, "error", "Display name can't be empty.");
+          return;
+        }
+        if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) {
+          showBrandingStatus(brandId, "error", "Color needs to be a hex code like #0e1a2b.");
+          return;
+        }
+
+        btn.disabled = true;
+        try {
+          const resp = await authFetch("/api/brands/" + brandId, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ display_name: name, primary_color: color || null })
+          });
+          const data = await resp.json().catch(function () { return null; });
+          if (!resp.ok) {
+            showBrandingStatus(brandId, "error", (data && data.error) || "Couldn't save.");
+            return;
+          }
+          showBrandingStatus(brandId, "success", "Saved.");
+          await loadBrands();
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    });
+
+    container.querySelectorAll("[data-delete-brand]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        const brandId = btn.dataset.deleteBrand;
+        const card = container.querySelector('.branding-card[data-brand-id="' + brandId + '"]');
+        const name = card ? card.querySelector("h3").textContent : "this brand";
+        if (!confirm("Delete " + name + "? This can't be undone.")) return;
+
+        btn.disabled = true;
+        try {
+          const resp = await authFetch("/api/brands/" + brandId, { method: "DELETE" });
+          const data = await resp.json().catch(function () { return null; });
+          if (!resp.ok) {
+            showBrandingStatus(brandId, "error", (data && data.error) || "Couldn't delete that brand.");
+            btn.disabled = false;
+            return;
+          }
+          await loadBrands();
+        } catch (err) {
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  // -------------------------------------------------------------------
+  // Brands (used by the bookings filter and the packages form)
+  // -------------------------------------------------------------------
+  let brandsCache = [];
+
+  async function loadBrands() {
+    const resp = await fetch(API_BASE_URL + "/api/brands");
+    brandsCache = await resp.json();
+
+    const filterSelect = document.getElementById("f-brand");
+    const pkSelect = document.getElementById("pk-brand");
+    const bkSelect = document.getElementById("bk-brand");
+    const calSelect = document.getElementById("cal-brand");
+    const leadBrandSelect = document.getElementById("lead-brand");
+    const editLeadBrandSelect = document.getElementById("edit-lead-brand");
+    const leadFilterBrandSelect = document.getElementById("lead-filter-brand");
+    // Reset each dropdown back to its static placeholder before
+    // repopulating -- loadBrands() runs again after every brand add,
+    // edit, or delete, and without this reset each of those re-runs would
+    // pile up duplicate <option> entries instead of replacing them.
+    filterSelect.innerHTML = '<option value="">All brands</option>';
+    pkSelect.innerHTML = '<option value="">Any brand</option>';
+    bkSelect.innerHTML = "";
+    calSelect.innerHTML = '<option value="">All brands</option>';
+    leadBrandSelect.innerHTML = "";
+    editLeadBrandSelect.innerHTML = "";
+    leadFilterBrandSelect.innerHTML = '<option value="">All brands</option>';
+    brandsCache.forEach(function (b) {
+      const opt1 = document.createElement("option");
+      opt1.value = b.slug;
+      opt1.textContent = b.display_name;
+      filterSelect.appendChild(opt1);
+
+      const opt2 = document.createElement("option");
+      opt2.value = b.id;
+      opt2.textContent = b.display_name;
+      pkSelect.appendChild(opt2);
+
+      const opt3 = document.createElement("option");
+      opt3.value = b.slug;
+      opt3.textContent = b.display_name;
+      bkSelect.appendChild(opt3);
+
+      const opt4 = document.createElement("option");
+      opt4.value = b.slug;
+      opt4.textContent = b.display_name;
+      calSelect.appendChild(opt4);
+
+      const opt5 = document.createElement("option");
+      opt5.value = b.id;
+      opt5.textContent = b.display_name;
+      leadBrandSelect.appendChild(opt5);
+
+      const opt6 = document.createElement("option");
+      opt6.value = b.id;
+      opt6.textContent = b.display_name;
+      editLeadBrandSelect.appendChild(opt6);
+
+      const opt7 = document.createElement("option");
+      opt7.value = b.id;
+      opt7.textContent = b.display_name;
+      leadFilterBrandSelect.appendChild(opt7);
+    });
+
+    applyTopbarBranding();
+    renderBrandingCards();
+  }
+
+  // Adding a brand outright (not just editing an existing one's branding)
+  // is super_admin only -- it's a structural change, so it gets its own
+  // gated panel rather than living inside every staffer's Company settings view.
+  if (isSuperAdmin) {
+    document.getElementById("add-brand-panel").style.display = "block";
+
+    document.getElementById("add-brand-btn").addEventListener("click", async function () {
+      const name = document.getElementById("new-brand-name").value.trim();
+      const slug = document.getElementById("new-brand-slug").value.trim();
+      const domain = document.getElementById("new-brand-domain").value.trim();
+      const statusEl = document.getElementById("add-brand-status");
+
+      if (!name || !slug) {
+        statusEl.textContent = "Brand name and slug are both required.";
+        statusEl.className = "portal-status show error";
+        return;
+      }
+
+      const btn = this;
+      btn.disabled = true;
+      try {
+        const resp = await authFetch("/api/brands", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ display_name: name, slug: slug, portal_domain: domain || null })
+        });
+        const data = await resp.json().catch(function () { return null; });
+        if (!resp.ok) {
+          statusEl.textContent = (data && data.error) || "Couldn't add that brand.";
+          statusEl.className = "portal-status show error";
+          return;
+        }
+        statusEl.className = "portal-status";
+        document.getElementById("new-brand-name").value = "";
+        document.getElementById("new-brand-slug").value = "";
+        document.getElementById("new-brand-domain").value = "";
+        await loadBrands();
+      } finally {
+        btn.disabled = false;
+      }
+    });
+  }
+
+  function brandNameForSlug(slug) {
+    const b = brandsCache.find(function (x) { return x.slug === slug; });
+    return b ? b.display_name : slug;
+  }
+
+  // The myplanningportal brand controls the shared/unbranded logo shown
+  // here in Admin and on the customer login/dashboard -- falls back to the
+  // hardcoded default image/color already in the HTML until someone saves
+  // something in the Branding panel.
+  function applyTopbarBranding() {
+    const mpp = brandsCache.find(function (b) { return b.slug === "myplanningportal"; });
+    if (!mpp) return;
+    if (mpp.logo_url) {
+      document.getElementById("topbar-logo").src = API_BASE_URL + mpp.logo_url;
+    }
+    if (mpp.primary_color) {
+      document.getElementById("admin-topbar").style.background = mpp.primary_color;
+    }
+  }
+
+  function boothTypeLabel(v) {
+    if (v === "social") return "Social";
+    if (v === "studio") return "Studio";
+    return "--";
+  }
+
+  // -------------------------------------------------------------------
+  // Bookings
+  // -------------------------------------------------------------------
+  function money(n) {
+    return "$" + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  async function loadBookings() {
+    const params = new URLSearchParams();
+    const date = document.getElementById("f-date").value;
+    const brand = document.getElementById("f-brand").value;
+    const status = document.getElementById("f-status").value;
+    if (date) params.set("date", date);
+    if (brand) params.set("brand", brand);
+    if (status) params.set("status", status);
+
+    const resp = await authFetch("/api/bookings?" + params.toString());
+    const rows = await resp.json();
+
+    const tbody = document.getElementById("bookings-tbody");
+    if (!Array.isArray(rows) || rows.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">No bookings match these filters.</div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = rows.map(function (b) {
+      const balance = Math.max(0, (b.package_total || 0) - (b.deposit_paid || 0));
+      const customerName = (b.customer_first_name || b.customer_last_name)
+        ? ((b.customer_first_name || "") + " " + (b.customer_last_name || "")).trim()
+        : (b.customer_email || "--");
+      return (
+        '<tr class="row-clickable" data-id="' + b.id + '">' +
+          "<td>" + b.event_date + "</td>" +
+          "<td>" + (b.brand_name || "") + "</td>" +
+          "<td>" + customerName + "</td>" +
+          "<td>" + (b.package_name || "--") + "</td>" +
+          '<td><span class="status-pill ' + b.status + '">' + b.status + "</span></td>" +
+          "<td>" + money(b.package_total) + "</td>" +
+          "<td>" + money(b.deposit_paid) + "</td>" +
+          "<td>" + money(balance) + "</td>" +
+        "</tr>"
+      );
+    }).join("");
+
+    // Clicking a row opens that booking's own page in a new tab instead of
+    // the in-page accordion panel -- same behavior as the Home dashboard's
+    // calendar widget, so you can have several bookings open side by side.
+    tbody.querySelectorAll("tr[data-id]").forEach(function (tr) {
+      tr.addEventListener("click", function () {
+        window.open("booking-detail.html?id=" + tr.dataset.id, "_blank");
+      });
+    });
+  }
+
+  let openBookingId = null;
+
+  async function openBookingDetail(id) {
+    const resp = await authFetch("/api/bookings/" + id);
+    const b = await resp.json();
+    openBookingId = b.id;
+
+    document.getElementById("detail-title").textContent =
+      "#" + b.id + " -- " + (b.brand_name || "") + " -- " +
+      ((b.customer_first_name || "") + " " + (b.customer_last_name || "")).trim();
+    document.getElementById("edit-status").value = b.status;
+    document.getElementById("edit-date").value = b.event_date;
+    document.getElementById("edit-package").value = b.package_id || "";
+    document.getElementById("edit-venue").value = b.venue_id || "";
+    document.getElementById("edit-total").value = b.package_total || 0;
+    document.getElementById("edit-deposit").value = b.deposit_paid || 0;
+    document.getElementById("edit-notes").value = b.notes || "";
+    document.getElementById("edit-allow-full").checked = !!b.allow_full_payment;
+    document.getElementById("edit-allow-retainer").checked = !!b.allow_retainer_payment;
+    document.getElementById("edit-allow-custom").checked = !!b.allow_custom_payment;
+    document.getElementById("edit-booth-type").value = b.booth_type || "";
+    document.getElementById("edit-allow-backdrop").checked = !!b.allow_backdrop_selection;
+    document.getElementById("edit-allow-template").checked = !!b.allow_template_selection;
+
+    const picks = [];
+    if (b.backdrop_choice) picks.push("Backdrop picked: " + b.backdrop_choice);
+    if (b.template_choice) picks.push("Template picked: " + b.template_choice);
+    document.getElementById("detail-picks").textContent = picks.join(" -- ");
+
+    document.querySelectorAll("#booking-detail input, #booking-detail select, #booking-detail textarea").forEach(function (el) {
+      el.disabled = !canEditBookings;
+    });
+    document.getElementById("save-booking-btn").style.display = canEditBookings ? "" : "none";
+
+    document.getElementById("booking-detail").classList.add("open");
+    document.getElementById("booking-detail").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  document.getElementById("close-detail-btn").addEventListener("click", function () {
+    document.getElementById("booking-detail").classList.remove("open");
+    openBookingId = null;
+  });
+
+  // Picking a package here is a shortcut, not a lock -- it fills in the
+  // package's price/booth type/widget defaults so staff can see them, but
+  // every field stays editable before Save.
+  document.getElementById("edit-package").addEventListener("change", function () {
+    const pkgId = Number(this.value);
+    const pkg = packagesCache.find(function (p) { return p.id === pkgId; });
+    if (!pkg) return;
+    document.getElementById("edit-total").value = pkg.price || 0;
+    document.getElementById("edit-booth-type").value = pkg.booth_type || "";
+    document.getElementById("edit-allow-backdrop").checked = !!pkg.allow_backdrop_selection;
+    document.getElementById("edit-allow-template").checked = !!pkg.allow_template_selection;
+  });
+
+  document.getElementById("save-booking-btn").addEventListener("click", async function () {
+    if (!openBookingId) return;
+    const btn = document.getElementById("save-booking-btn");
+    btn.disabled = true;
+    btn.textContent = "Saving...";
+
+    try {
+      await authFetch("/api/bookings/" + openBookingId, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          status: document.getElementById("edit-status").value,
+          event_date: document.getElementById("edit-date").value,
+          package_id: document.getElementById("edit-package").value ? Number(document.getElementById("edit-package").value) : null,
+          venue_id: document.getElementById("edit-venue").value ? Number(document.getElementById("edit-venue").value) : null,
+          package_total: Number(document.getElementById("edit-total").value) || 0,
+          deposit_paid: Number(document.getElementById("edit-deposit").value) || 0,
+          notes: document.getElementById("edit-notes").value,
+          allow_full_payment: document.getElementById("edit-allow-full").checked ? 1 : 0,
+          allow_retainer_payment: document.getElementById("edit-allow-retainer").checked ? 1 : 0,
+          allow_custom_payment: document.getElementById("edit-allow-custom").checked ? 1 : 0,
+          booth_type: document.getElementById("edit-booth-type").value || null,
+          allow_backdrop_selection: document.getElementById("edit-allow-backdrop").checked ? 1 : 0,
+          allow_template_selection: document.getElementById("edit-allow-template").checked ? 1 : 0
+        })
+      });
+      document.getElementById("booking-detail").classList.remove("open");
+      openBookingId = null;
+      await loadBookings();
+      await loadCalendarBookings();
+    } catch (err) {
+      // authFetch already redirects on 401; other errors just leave the panel open to retry.
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Save changes";
+    }
+  });
+
+  ["f-date", "f-brand", "f-status"].forEach(function (id) {
+    document.getElementById(id).addEventListener("change", loadBookings);
+  });
+  document.getElementById("clear-filters").addEventListener("click", function () {
+    document.getElementById("f-date").value = "";
+    document.getElementById("f-brand").value = "";
+    document.getElementById("f-status").value = "";
+    loadBookings();
+  });
+
+  function showNewBookingStatus(kind, message) {
+    const el = document.getElementById("new-booking-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  document.getElementById("add-booking-btn").addEventListener("click", async function () {
+    const email = document.getElementById("bk-email").value.trim();
+    const eventDate = document.getElementById("bk-date").value;
+    const brandSlug = document.getElementById("bk-brand").value;
+
+    if (!email || !eventDate || !brandSlug) {
+      showNewBookingStatus("error", "Brand, event date, and customer email are required.");
+      return;
+    }
+
+    const btn = document.getElementById("add-booking-btn");
+    btn.disabled = true;
+    btn.textContent = "Creating...";
+
+    try {
+      const resp = await fetch(API_BASE_URL + "/api/bookings", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          brand_slug: brandSlug,
+          event_date: eventDate,
+          event_type: document.getElementById("bk-event-type").value.trim() || null,
+          package_id: document.getElementById("bk-package").value ? Number(document.getElementById("bk-package").value) : null,
+          venue_id: document.getElementById("bk-venue").value ? Number(document.getElementById("bk-venue").value) : null,
+          notes: document.getElementById("bk-notes").value.trim() || null,
+          customer: {
+            email: email,
+            phone: document.getElementById("bk-phone").value.trim() || null,
+            first_name: document.getElementById("bk-first-name").value.trim() || null,
+            last_name: document.getElementById("bk-last-name").value.trim() || null
+          }
+        })
+      });
+      const data = await resp.json().catch(function () { return null; });
+
+      if (!resp.ok) {
+        showNewBookingStatus("error", (data && data.error) || "Couldn't create that booking.");
+        return;
+      }
+
+      showNewBookingStatus("success", "Booking #" + data.id + " created as an inquiry. Click it in the table to price it or mark it booked.");
+      document.getElementById("bk-date").value = "";
+      document.getElementById("bk-event-type").value = "";
+      document.getElementById("bk-package").value = "";
+      document.getElementById("bk-venue").value = "";
+      document.getElementById("bk-client-search").value = "";
+      document.getElementById("bk-client-results").style.display = "none";
+      document.getElementById("bk-client-results").innerHTML = "";
+      document.getElementById("bk-email").value = "";
+      document.getElementById("bk-phone").value = "";
+      document.getElementById("bk-first-name").value = "";
+      document.getElementById("bk-last-name").value = "";
+      document.getElementById("bk-notes").value = "";
+      await loadBookings();
+      await loadCalendarBookings();
+    } catch (err) {
+      showNewBookingStatus("error", "Couldn't reach the server. Check your connection and try again.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Create booking";
+    }
+  });
+
+  // -------------------------------------------------------------------
+  // Calendar
+  // -------------------------------------------------------------------
+  let calendarBookingsCache = [];
+  let calendarViewDate = new Date();
+
+  const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const DOW_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  function isoDate(d) { return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()); }
+
+  function bookingLabel(b) {
+    return ((b.customer_first_name || "") + " " + (b.customer_last_name || "")).trim() ||
+      b.customer_email || b.event_type || ("#" + b.id);
+  }
+
+  function bookingPillHtml(b) {
+    return '<div class="cal-booking-pill status-pill ' + b.status + '" data-id="' + b.id + '">' + bookingLabel(b) + "</div>";
+  }
+
+  function wireCalendarPillClicks(root) {
+    root.querySelectorAll(".cal-booking-pill").forEach(function (el) {
+      el.addEventListener("click", function () {
+        showPanel("bookings");
+        openBookingDetail(el.dataset.id);
+      });
+    });
+  }
+
+  async function loadCalendarBookings() {
+    const brand = document.getElementById("cal-brand").value;
+    const params = new URLSearchParams();
+    if (brand) params.set("brand", brand);
+    const resp = await authFetch("/api/bookings?" + params.toString());
+    const rows = await resp.json();
+    calendarBookingsCache = Array.isArray(rows) ? rows : [];
+    renderCalendar();
+  }
+
+  function renderCalendar() {
+    const year = calendarViewDate.getFullYear();
+    const month = calendarViewDate.getMonth();
+    document.getElementById("cal-month-label").textContent = MONTH_NAMES[month] + " " + year;
+
+    const startDow = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+    const todayStr = isoDate(new Date());
+
+    const byDate = {};
+    calendarBookingsCache.forEach(function (b) {
+      if (!byDate[b.event_date]) byDate[b.event_date] = [];
+      byDate[b.event_date].push(b);
+    });
+
+    const totalCells = Math.ceil((startDow + daysInMonth) / 7) * 7;
+    const cells = [];
+    for (let i = 0; i < totalCells; i++) {
+      const dayNum = i - startDow + 1;
+      let cellDate, otherMonth = false;
+      if (dayNum < 1) {
+        cellDate = new Date(year, month - 1, daysInPrevMonth + dayNum);
+        otherMonth = true;
+      } else if (dayNum > daysInMonth) {
+        cellDate = new Date(year, month + 1, dayNum - daysInMonth);
+        otherMonth = true;
+      } else {
+        cellDate = new Date(year, month, dayNum);
+      }
+      const dateStr = isoDate(cellDate);
+      cells.push({
+        dateStr: dateStr,
+        dayLabel: cellDate.getDate(),
+        otherMonth: otherMonth,
+        isToday: dateStr === todayStr,
+        bookings: byDate[dateStr] || []
+      });
+    }
+
+    let html = DOW_LABELS.map(function (d) { return '<div class="cal-dow">' + d + "</div>"; }).join("");
+
+    html += cells.map(function (c) {
+      const visible = c.bookings.slice(0, 3);
+      const overflow = c.bookings.length - visible.length;
+      const pills = visible.map(bookingPillHtml).join("");
+      const more = overflow > 0 ? '<div class="cal-more" data-date="' + c.dateStr + '">+' + overflow + " more</div>" : "";
+      const classes = "cal-day" + (c.otherMonth ? " other-month" : "") + (c.isToday ? " today" : "");
+      return (
+        '<div class="' + classes + '" data-date="' + c.dateStr + '">' +
+          '<div class="cal-day-num">' + c.dayLabel + "</div>" +
+          '<div class="cal-day-bookings">' + pills + more + "</div>" +
+        "</div>"
+      );
+    }).join("");
+
+    const grid = document.getElementById("calendar-grid");
+    grid.innerHTML = html;
+    wireCalendarPillClicks(grid);
+
+    grid.querySelectorAll(".cal-more").forEach(function (el) {
+      el.addEventListener("click", function () {
+        const dateStr = el.dataset.date;
+        const cell = grid.querySelector('.cal-day[data-date="' + dateStr + '"]');
+        if (!cell) return;
+        const dayBookings = calendarBookingsCache.filter(function (b) { return b.event_date === dateStr; });
+        const box = cell.querySelector(".cal-day-bookings");
+        box.innerHTML = dayBookings.map(bookingPillHtml).join("");
+        wireCalendarPillClicks(box);
+      });
+    });
+  }
+
+  document.getElementById("cal-prev-btn").addEventListener("click", function () {
+    calendarViewDate = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1);
+    renderCalendar();
+  });
+  document.getElementById("cal-next-btn").addEventListener("click", function () {
+    calendarViewDate = new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1);
+    renderCalendar();
+  });
+  document.getElementById("cal-today-btn").addEventListener("click", function () {
+    calendarViewDate = new Date();
+    renderCalendar();
+  });
+  document.getElementById("cal-brand").addEventListener("change", loadCalendarBookings);
+
+  // -------------------------------------------------------------------
+  // Leads pipeline -- a configurable set of stages (admin+ manages the
+  // columns themselves via the "Configure pipeline" panel) that leads move
+  // through on their way to becoming a booking or getting marked lost.
+  // Sales+ only, same bar as Clients/Venues.
+  // -------------------------------------------------------------------
+  let pipelineStagesCache = [];
+  let leadsCache = [];
+  let openLeadId = null;
+
+  function leadName(l) {
+    return ((l.first_name || "") + " " + (l.last_name || "")).trim();
+  }
+
+  function leadCardTitle(l) {
+    return leadName(l) || l.organization || l.email || ("Lead #" + l.id);
+  }
+
+  function fillStageSelect(selectId) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    select.innerHTML = "";
+    pipelineStagesCache.forEach(function (s) {
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = s.name;
+      select.appendChild(opt);
+    });
+  }
+
+  function populateLeadAssignee() {
+    if (!canAssignTasks) return;
+    fillAssigneeSelect("lead-assignee", "Unassigned");
+    fillAssigneeSelect("edit-lead-assignee", "Unassigned");
+  }
+
+  // ---- Pipeline stage configuration (admin+) ----
+
+  function showPipelineConfigStatus(kind, message) {
+    const el = document.getElementById("pipeline-config-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  async function loadPipelineStages() {
+    const resp = await authFetch("/api/pipeline-stages");
+    const rows = await resp.json();
+    pipelineStagesCache = Array.isArray(rows) ? rows : [];
+    renderPipelineConfig();
+    fillStageSelect("edit-lead-stage");
+    renderPipelineBoard();
+  }
+
+  function renderPipelineConfig() {
+    const container = document.getElementById("pipeline-stage-rows");
+    container.innerHTML = "";
+    pipelineStagesCache.forEach(function (s, index) {
+      const row = document.createElement("div");
+      row.className = "stage-row";
+
+      const colorInput = document.createElement("input");
+      colorInput.type = "color";
+      colorInput.value = s.color || "#3a4a60";
+      colorInput.addEventListener("change", function () {
+        savePipelineStage(s.id, { color: colorInput.value });
+      });
+      row.appendChild(colorInput);
+
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.className = "stage-name-input";
+      nameInput.value = s.name;
+      nameInput.addEventListener("change", function () {
+        const v = nameInput.value.trim();
+        if (!v) { nameInput.value = s.name; return; }
+        savePipelineStage(s.id, { name: v });
+      });
+      row.appendChild(nameInput);
+
+      const wonLabel = document.createElement("label");
+      wonLabel.className = "stage-flag";
+      const wonCheckbox = document.createElement("input");
+      wonCheckbox.type = "checkbox";
+      wonCheckbox.checked = !!s.is_won;
+      wonCheckbox.addEventListener("change", function () {
+        savePipelineStage(s.id, { is_won: wonCheckbox.checked });
+      });
+      wonLabel.appendChild(wonCheckbox);
+      wonLabel.appendChild(document.createTextNode(" Won"));
+      row.appendChild(wonLabel);
+
+      const lostLabel = document.createElement("label");
+      lostLabel.className = "stage-flag";
+      const lostCheckbox = document.createElement("input");
+      lostCheckbox.type = "checkbox";
+      lostCheckbox.checked = !!s.is_lost;
+      lostCheckbox.addEventListener("change", function () {
+        savePipelineStage(s.id, { is_lost: lostCheckbox.checked });
+      });
+      lostLabel.appendChild(lostCheckbox);
+      lostLabel.appendChild(document.createTextNode(" Lost"));
+      row.appendChild(lostLabel);
+
+      const upBtn = document.createElement("button");
+      upBtn.className = "btn-secondary stage-reorder-btn";
+      upBtn.textContent = "↑";
+      upBtn.title = "Move up";
+      upBtn.disabled = index === 0;
+      upBtn.addEventListener("click", function () { movePipelineStageAndReload(s.id, "up"); });
+      row.appendChild(upBtn);
+
+      const downBtn = document.createElement("button");
+      downBtn.className = "btn-secondary stage-reorder-btn";
+      downBtn.textContent = "↓";
+      downBtn.title = "Move down";
+      downBtn.disabled = index === pipelineStagesCache.length - 1;
+      downBtn.addEventListener("click", function () { movePipelineStageAndReload(s.id, "down"); });
+      row.appendChild(downBtn);
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "btn-danger";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.addEventListener("click", function () { deletePipelineStageAndReload(s.id); });
+      row.appendChild(deleteBtn);
+
+      container.appendChild(row);
+    });
+  }
+
+  async function savePipelineStage(id, payload) {
+    const resp = await authFetch("/api/pipeline-stages/" + id, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json().catch(function () { return null; });
+    if (!resp.ok) {
+      showPipelineConfigStatus("error", (data && data.error) || "Couldn't save that stage.");
+    }
+    await loadPipelineStages();
+  }
+
+  async function movePipelineStageAndReload(id, direction) {
+    const resp = await authFetch("/api/pipeline-stages/" + id + "/move", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ direction: direction })
+    });
+    const data = await resp.json().catch(function () { return null; });
+    if (!resp.ok) {
+      showPipelineConfigStatus("error", (data && data.error) || "Couldn't reorder that stage.");
+      return;
+    }
+    await loadPipelineStages();
+  }
+
+  async function deletePipelineStageAndReload(id) {
+    if (!confirm("Delete this pipeline stage? This can't be undone.")) return;
+    const resp = await authFetch("/api/pipeline-stages/" + id, { method: "DELETE" });
+    const data = await resp.json().catch(function () { return null; });
+    if (!resp.ok) {
+      showPipelineConfigStatus("error", (data && data.error) || "Couldn't delete that stage.");
+      return;
+    }
+    showPipelineConfigStatus("success", "Stage deleted.");
+    await loadPipelineStages();
+  }
+
+  document.getElementById("toggle-pipeline-config-btn").addEventListener("click", function () {
+    const panel = document.getElementById("pipeline-config-panel");
+    if (panel.style.display === "block") {
+      panel.style.display = "none";
+    } else {
+      panel.style.display = "block";
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  });
+
+  document.getElementById("add-stage-btn").addEventListener("click", async function () {
+    const name = document.getElementById("new-stage-name").value.trim();
+    if (!name) { showPipelineConfigStatus("error", "Give the stage a name first."); return; }
+    const color = document.getElementById("new-stage-color").value;
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/pipeline-stages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: name, color: color })
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        showPipelineConfigStatus("error", (data && data.error) || "Couldn't add that stage.");
+        return;
+      }
+      document.getElementById("new-stage-name").value = "";
+      document.getElementById("new-stage-color").value = "#3a4a60";
+      showPipelineConfigStatus("success", "Stage added.");
+      await loadPipelineStages();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ---- The board itself ----
+
+  async function loadLeads() {
+    const search = document.getElementById("lead-search").value.trim();
+    const brandId = document.getElementById("lead-filter-brand").value;
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (brandId) params.set("brand_id", brandId);
+    const resp = await authFetch("/api/leads?" + params.toString());
+    const rows = await resp.json();
+    leadsCache = Array.isArray(rows) ? rows : [];
+    renderPipelineBoard();
+  }
+
+  function leadCardHtml(l) {
+    const metaParts = [];
+    if (l.organization && leadName(l)) metaParts.push(l.organization);
+    if (l.brand_name) metaParts.push(l.brand_name);
+    if (l.event_date) metaParts.push(l.event_date);
+    const assignee = ((l.assignee_first_name || "") + " " + (l.assignee_last_name || "")).trim();
+    if (assignee) metaParts.push(assignee);
+    const valueLine = l.estimated_value != null && l.estimated_value !== "" ? money(l.estimated_value) : "";
+
+    const stageOptions = pipelineStagesCache.map(function (s) {
+      return '<option value="' + s.id + '"' + (s.id === l.stage_id ? " selected" : "") + '>' + s.name + "</option>";
+    }).join("");
+
+    return (
+      '<div class="lead-card" data-id="' + l.id + '">' +
+        '<div class="lead-card-title">' + leadCardTitle(l) + "</div>" +
+        '<div class="lead-card-meta">' +
+          (metaParts.length ? "<div>" + metaParts.join(" -- ") + "</div>" : "") +
+          (valueLine ? "<div>" + valueLine + "</div>" : "") +
+        "</div>" +
+        '<select class="lead-stage-select" data-id="' + l.id + '">' + stageOptions + "</select>" +
+      "</div>"
+    );
+  }
+
+  function renderPipelineBoard() {
+    const board = document.getElementById("pipeline-board");
+    if (pipelineStagesCache.length === 0) {
+      board.innerHTML = dashEmptyRow("No pipeline stages configured yet.");
+      return;
+    }
+
+    const byStage = {};
+    leadsCache.forEach(function (l) {
+      if (!byStage[l.stage_id]) byStage[l.stage_id] = [];
+      byStage[l.stage_id].push(l);
+    });
+
+    board.innerHTML = pipelineStagesCache.map(function (s) {
+      const stageLeads = byStage[s.id] || [];
+      const cardsHtml = stageLeads.length ? stageLeads.map(leadCardHtml).join("") : dashEmptyRow("No leads here.");
+      return (
+        '<div class="pipeline-column" data-stage-id="' + s.id + '">' +
+          '<div class="pipeline-column-header">' +
+            '<span class="pipeline-column-dot" style="background:' + (s.color || "#3a4a60") + ';"></span>' +
+            '<span class="pipeline-column-title">' + s.name + "</span>" +
+            '<span class="pipeline-column-count">' + stageLeads.length + "</span>" +
+          "</div>" +
           cardsHtml +
         "</div>"
       );
