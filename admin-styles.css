@@ -184,6 +184,18 @@ textarea {
   font-family: inherit;
 }
 
+#add-menu-toggle-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 17px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .settings-dropdown {
   position: relative;
 }
