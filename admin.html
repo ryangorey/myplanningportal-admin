@@ -14,8 +14,16 @@
 <div class="admin-topbar" id="admin-topbar">
   <img id="topbar-logo" src="https://raw.githubusercontent.com/ryangorey/RGMLlogo/102e74830a7fd89dca2451699469c742463da962/my_planning_portal_logo_dark_bg_small.png" alt="myplanningportal">
   <div class="who">
-    <span id="who-name"></span>
-    <span class="role-badge" id="who-role"></span>
+    <div class="settings-dropdown" id="who-menu-wrap">
+      <button id="who-toggle-btn">
+        <span id="who-name"></span>
+        <span class="role-badge" id="who-role"></span>
+        <i class="ti" style="font-style:normal;">&#9662;</i>
+      </button>
+      <div class="dropdown-menu" id="who-menu">
+        <button class="dropdown-item" data-tab="account">Account details</button>
+      </div>
+    </div>
     <div class="settings-dropdown" id="add-menu-wrap">
       <button id="add-menu-toggle-btn" title="Add new">+</button>
       <div class="dropdown-menu" id="add-menu">
@@ -26,7 +34,6 @@
     <div class="settings-dropdown">
       <button id="settings-toggle-btn">Settings <i class="ti" style="font-style:normal;">&#9662;</i></button>
       <div class="dropdown-menu" id="settings-menu">
-        <button class="dropdown-item" data-tab="account">Account details</button>
         <button class="dropdown-item" data-tab="company">Company settings</button>
         <button class="dropdown-item" data-tab="staff">Staff</button>
         <button class="dropdown-item" data-tab="clients">Clients</button>
@@ -774,6 +781,11 @@
     document.getElementById("settings-menu").classList.toggle("open");
   });
 
+  document.getElementById("who-toggle-btn").addEventListener("click", function (e) {
+    e.stopPropagation();
+    document.getElementById("who-menu").classList.toggle("open");
+  });
+
   document.getElementById("add-menu-toggle-btn").addEventListener("click", function (e) {
     e.stopPropagation();
     document.getElementById("add-menu").classList.toggle("open");
@@ -805,6 +817,7 @@
   document.addEventListener("click", function () {
     document.getElementById("settings-menu").classList.remove("open");
     document.getElementById("add-menu").classList.remove("open");
+    document.getElementById("who-menu").classList.remove("open");
   });
 
   // -------------------------------------------------------------------
