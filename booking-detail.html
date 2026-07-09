@@ -116,6 +116,26 @@
       <h3>Payment history</h3>
       <div id="payments-list" style="font-size:13px;color:#6b6355;"></div>
     </div>
+
+    <div class="add-panel" id="contract-card">
+      <h3>Contract</h3>
+      <div id="contract-status" style="font-size:13px;color:#6b6355;margin-bottom:10px;"></div>
+      <div id="contract-upload-wrap" style="display:flex;gap:10px;align-items:center;">
+        <input type="file" id="contract-file-input" accept="application/pdf,image/png,image/jpeg">
+        <button class="btn-primary" id="contract-upload-btn">Upload</button>
+      </div>
+      <div id="contract-status-msg" class="portal-status"></div>
+    </div>
+
+    <div class="add-panel" id="messages-card">
+      <h3>Messages</h3>
+      <div id="messages-thread" style="max-height:320px;overflow-y:auto;margin-bottom:12px;"></div>
+      <div id="messages-status" class="portal-status"></div>
+      <div style="display:flex;gap:8px;align-items:flex-start;">
+        <textarea id="message-input" placeholder="Reply to the customer..." rows="2" style="flex:1;"></textarea>
+        <button class="btn-primary" id="message-send-btn">Send</button>
+      </div>
+    </div>
   </div>
 
 </div>
@@ -287,8 +307,136 @@
       }).join("");
     }
 
+    renderContractStatus(b.contract_url);
+    document.getElementById("contract-upload-wrap").style.display = canEditBookings ? "flex" : "none";
+
     document.getElementById("booking-detail-content").style.display = "block";
+
+    loadMessages().catch(function () {
+      const el = document.getElementById("messages-status");
+      el.textContent = "Couldn't load messages.";
+      el.className = "portal-status show error";
+    });
   }
+
+  // -------------------------------------------------------------------
+  // Contract (sales+ can upload; anyone can view)
+  // -------------------------------------------------------------------
+  function renderContractStatus(contractUrl) {
+    const el = document.getElementById("contract-status");
+    if (contractUrl) {
+      el.innerHTML = 'On file -- <a href="' + API_BASE_URL + contractUrl + '" target="_blank" rel="noopener">view contract</a>';
+    } else {
+      el.textContent = "No contract uploaded yet.";
+    }
+  }
+
+  document.getElementById("contract-upload-btn").addEventListener("click", async function () {
+    const input = document.getElementById("contract-file-input");
+    const file = input.files && input.files[0];
+    const msgEl = document.getElementById("contract-status-msg");
+    if (!file) {
+      msgEl.textContent = "Choose a PDF, PNG, or JPEG first.";
+      msgEl.className = "portal-status show error";
+      return;
+    }
+    const btn = this;
+    btn.disabled = true;
+    btn.textContent = "Uploading...";
+    try {
+      const bytes = await file.arrayBuffer();
+      const resp = await authFetch("/api/bookings/" + bookingId + "/contract", {
+        method: "POST",
+        headers: { "content-type": file.type || "application/octet-stream" },
+        body: bytes
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        msgEl.textContent = (data && data.error) || "Couldn't upload that file.";
+        msgEl.className = "portal-status show error";
+        return;
+      }
+      renderContractStatus(data.contract_url);
+      input.value = "";
+      msgEl.textContent = "Contract uploaded.";
+      msgEl.className = "portal-status show success";
+    } catch (err) {
+      msgEl.textContent = "Couldn't reach the server. Check your connection and try again.";
+      msgEl.className = "portal-status show error";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Upload";
+    }
+  });
+
+  // -------------------------------------------------------------------
+  // Messages (any staff role can view/reply)
+  // -------------------------------------------------------------------
+  function messageRowHtml(m) {
+    const isStaff = m.sender_type === "staff";
+    const name = isStaff
+      ? ((m.staff_first_name || "") + " " + (m.staff_last_name || "")).trim() || "Our team"
+      : ((m.customer_first_name || "") + " " + (m.customer_last_name || "")).trim() || "Customer";
+    const when = (m.created_at || "").replace("T", " ").slice(0, 16);
+    return (
+      "<div style='padding:8px 0;border-bottom:0.5px solid #eee6d6;'>" +
+        "<div style='font-size:13px;color:#0e1a2b;'>" + escapeHtml(m.body) + "</div>" +
+        "<div style='font-size:11px;color:#a39a86;margin-top:2px;'>" + escapeHtml(name) + (when ? " -- " + when : "") + "</div>" +
+      "</div>"
+    );
+  }
+
+  function escapeHtml(s) {
+    const div = document.createElement("div");
+    div.textContent = s == null ? "" : String(s);
+    return div.innerHTML;
+  }
+
+  async function loadMessages() {
+    const resp = await authFetch("/api/bookings/" + bookingId + "/messages");
+    const rows = await resp.json().catch(function () { return []; });
+    const thread = document.getElementById("messages-thread");
+    if (!Array.isArray(rows) || rows.length === 0) {
+      thread.innerHTML = "<div style='font-size:13px;color:#a39a86;padding:8px 0;'>No messages yet.</div>";
+    } else {
+      thread.innerHTML = rows.map(messageRowHtml).join("");
+      thread.scrollTop = thread.scrollHeight;
+    }
+  }
+
+  document.getElementById("message-send-btn").addEventListener("click", async function () {
+    const input = document.getElementById("message-input");
+    const text = input.value.trim();
+    const msgEl = document.getElementById("messages-status");
+    if (!text) {
+      msgEl.textContent = "Type a message first.";
+      msgEl.className = "portal-status show error";
+      return;
+    }
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/bookings/" + bookingId + "/messages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ body: text })
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        msgEl.textContent = (data && data.error) || "Couldn't send that message.";
+        msgEl.className = "portal-status show error";
+        return;
+      }
+      input.value = "";
+      msgEl.className = "portal-status";
+      await loadMessages();
+    } catch (err) {
+      msgEl.textContent = "Couldn't reach the server. Check your connection and try again.";
+      msgEl.className = "portal-status show error";
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   document.getElementById("edit-package").addEventListener("change", function () {
     const pkgId = Number(this.value);
