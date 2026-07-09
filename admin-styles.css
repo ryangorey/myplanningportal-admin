@@ -378,6 +378,88 @@ textarea {
 }
 
 /* ------------------------------------------------------------------ */
+/* Home dashboard widgets                                              */
+/* ------------------------------------------------------------------ */
+
+.customize-panel {
+  background: #faf7f0;
+  border: 0.5px solid #e3ddcf;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin: 18px 0;
+  display: none;
+}
+.customize-panel.open { display: block; }
+
+.customize-panel label.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 400;
+  margin: 0 0 10px;
+}
+.customize-panel label.toggle-row:last-child { margin-bottom: 0; }
+.customize-panel label.toggle-row input { width: auto; margin: 0; }
+
+.dash-widgets {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.dash-widget {
+  background: #fff;
+  border: 0.5px solid #e3ddcf;
+  border-radius: 10px;
+  padding: 18px 20px;
+  display: none;
+}
+.dash-widget.show { display: block; }
+
+.dash-widget h3 {
+  font-family: "Fraunces", serif;
+  font-size: 15px;
+  font-weight: 500;
+  margin: 0 0 14px;
+}
+
+.dash-subhead {
+  font-size: 11px;
+  font-weight: 500;
+  color: #6b6355;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0 0 8px;
+}
+
+.dash-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dash-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #faf7f0;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.dash-row .dash-row-main { display: flex; flex-direction: column; gap: 2px; }
+.dash-row .dash-row-title { font-weight: 500; }
+.dash-row .dash-row-meta { font-size: 12px; color: #6b6355; }
+.dash-row .dash-row-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.dash-row.completed { opacity: 0.6; }
+.dash-row.completed .dash-row-title { text-decoration: line-through; }
+
+.dash-row input[type="checkbox"] { width: auto; margin: 0; }
+
+/* ------------------------------------------------------------------ */
 /* Branding                                                            */
 /* ------------------------------------------------------------------ */
 
