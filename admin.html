@@ -31,7 +31,8 @@
 </div>
 
 <div class="admin-tabs">
-  <button class="admin-tab active" data-tab="bookings">Bookings</button>
+  <button class="admin-tab active" data-tab="home">Home</button>
+  <button class="admin-tab" data-tab="bookings">Bookings</button>
   <button class="admin-tab" data-tab="calendar">Calendar</button>
   <button class="admin-tab" data-tab="equipment">Equipment</button>
   <button class="admin-tab" data-tab="packages">Packages</button>
@@ -39,8 +40,52 @@
 
 <div class="admin-content">
 
+  <!-- ============================== Home ============================== -->
+  <div class="admin-panel active" id="panel-home">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h1>Home</h1>
+        <p class="section-sub">Your day at a glance.</p>
+      </div>
+      <button class="btn-secondary" id="customize-home-btn">Customize</button>
+    </div>
+
+    <div class="customize-panel" id="customize-panel">
+      <label class="toggle-row"><input type="checkbox" id="show-widget-calendar"> Calendar (leads &amp; bookings)</label>
+      <label class="toggle-row"><input type="checkbox" id="show-widget-tasks"> Tasks (upcoming &amp; completed)</label>
+      <label class="toggle-row"><input type="checkbox" id="show-widget-bookings"> Bookings</label>
+    </div>
+
+    <div class="dash-widgets">
+      <div class="dash-widget" id="widget-calendar">
+        <h3>Calendar &ndash; leads &amp; bookings</h3>
+        <div id="dash-calendar-list" class="dash-list"></div>
+      </div>
+
+      <div class="dash-widget" id="widget-tasks">
+        <h3>Tasks</h3>
+        <div id="dash-task-status" class="portal-status"></div>
+        <div class="form-grid" style="margin-bottom:10px;">
+          <div class="full"><label>New task</label><input type="text" id="new-task-title" placeholder="Task title"></div>
+          <div><label>Due date</label><input type="date" id="new-task-due"></div>
+          <div id="new-task-assign-wrap" style="display:none;"><label>Assign to</label><select id="new-task-assignee"></select></div>
+        </div>
+        <button class="btn-primary" id="add-task-btn" style="margin-bottom:18px;">Add task</button>
+        <p class="dash-subhead">Upcoming</p>
+        <div id="dash-tasks-upcoming" class="dash-list" style="margin-bottom:18px;"></div>
+        <p class="dash-subhead">Completed</p>
+        <div id="dash-tasks-completed" class="dash-list"></div>
+      </div>
+
+      <div class="dash-widget" id="widget-bookings">
+        <h3>Bookings</h3>
+        <div id="dash-bookings-list" class="dash-list"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- ============================== Bookings ============================== -->
-  <div class="admin-panel active" id="panel-bookings">
+  <div class="admin-panel" id="panel-bookings">
     <h1>Bookings</h1>
     <p class="section-sub">Every inquiry and booking across all three brands.</p>
 
@@ -348,6 +393,17 @@
     <p class="section-sub">Logo, name, and accent color for each brand. The myplanningportal brand controls the logo shown here in Admin and on the customer login/dashboard.</p>
 
     <div id="branding-cards"></div>
+
+    <div class="add-panel" id="add-brand-panel" style="display:none;">
+      <h3>Add a brand</h3>
+      <div id="add-brand-status" class="portal-status"></div>
+      <div class="form-grid">
+        <div><label>Brand name</label><input type="text" id="new-brand-name" placeholder="e.g. Snap Booth Co"></div>
+        <div><label>Slug</label><input type="text" id="new-brand-slug" placeholder="letters, numbers, dashes -- e.g. snap-booth-co"></div>
+        <div class="full"><label>Portal domain (optional)</label><input type="text" id="new-brand-domain" placeholder="e.g. portal.snapboothco.com"></div>
+      </div>
+      <button class="btn-primary" id="add-brand-btn">Add brand</button>
+    </div>
   </div>
 
   <!-- ============================== Staff ============================== -->
@@ -356,6 +412,20 @@
     <p class="section-sub">Everyone with access to this admin site.</p>
 
     <div id="staff-status" class="portal-status"></div>
+
+    <div class="filter-bar">
+      <div style="flex:1;">
+        <label for="staff-search">Search</label>
+        <input type="text" id="staff-search" placeholder="Name or email">
+      </div>
+      <div>
+        <label for="staff-hide-inactive">&nbsp;</label>
+        <label style="display:flex;align-items:center;gap:6px;height:38px;font-size:13px;font-weight:400;">
+          <input type="checkbox" id="staff-hide-inactive" style="width:auto;margin:0;">
+          Hide inactive
+        </label>
+      </div>
+    </div>
 
     <table class="admin-table">
       <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th></th></tr></thead>
@@ -524,6 +594,8 @@
   const canSeeVenuesClients = roleAtLeast(myRole, "sales");
   const canSeeStaff = roleAtLeast(myRole, "admin");
   const canEditBranding = roleAtLeast(myRole, "admin");
+  const canAssignTasks = roleAtLeast(myRole, "admin");
+  const isSuperAdmin = myRole === "super_admin";
 
   function applyRoleVisibility() {
     if (!canEditBranding) {
@@ -559,6 +631,9 @@
     if (!canEditBookings) {
       const p = document.querySelector('#panel-bookings .add-panel');
       if (p) p.style.display = "none";
+    }
+    if (canAssignTasks) {
+      document.getElementById("new-task-assign-wrap").style.display = "";
     }
   }
   applyRoleVisibility();
@@ -619,6 +694,10 @@
     document.getElementById("acct-first-name").value = me.first_name || "";
     document.getElementById("acct-last-name").value = me.last_name || "";
     document.getElementById("acct-email").value = me.email || "";
+    if (me.dashboard_prefs) {
+      dashboardPrefs = me.dashboard_prefs;
+      applyDashboardVisibility();
+    }
   }
 
   document.getElementById("save-account-btn").addEventListener("click", async function () {
@@ -683,6 +762,206 @@
   });
 
   // -------------------------------------------------------------------
+  // Home dashboard -- customizable widgets: Calendar (leads & bookings),
+  // Tasks (upcoming & completed), Bookings. Which widgets show is a
+  // per-staffer preference saved server-side on their own account
+  // (dashboard_prefs, via the existing /api/staff/me self-service
+  // endpoint), so it follows them to any device they sign in on.
+  // -------------------------------------------------------------------
+  let dashboardPrefs = { calendar: true, tasks: true, bookings: true };
+  let myTasksCache = [];
+
+  function applyDashboardVisibility() {
+    document.getElementById("show-widget-calendar").checked = !!dashboardPrefs.calendar;
+    document.getElementById("show-widget-tasks").checked = !!dashboardPrefs.tasks;
+    document.getElementById("show-widget-bookings").checked = !!dashboardPrefs.bookings;
+    document.getElementById("widget-calendar").classList.toggle("show", !!dashboardPrefs.calendar);
+    document.getElementById("widget-tasks").classList.toggle("show", !!dashboardPrefs.tasks);
+    document.getElementById("widget-bookings").classList.toggle("show", !!dashboardPrefs.bookings);
+  }
+
+  document.getElementById("customize-home-btn").addEventListener("click", function (e) {
+    e.stopPropagation();
+    document.getElementById("customize-panel").classList.toggle("open");
+  });
+
+  ["calendar", "tasks", "bookings"].forEach(function (key) {
+    document.getElementById("show-widget-" + key).addEventListener("change", async function () {
+      dashboardPrefs[key] = this.checked;
+      applyDashboardVisibility();
+      await authFetch("/api/staff/me", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ dashboard_prefs: dashboardPrefs })
+      });
+    });
+  });
+
+  function dashEmptyRow(message) {
+    return '<div class="empty-state" style="padding:20px 0;">' + message + '</div>';
+  }
+
+  // Calendar widget -- soonest-first agenda of everything not yet passed
+  // or cancelled, leads (inquiry) and confirmed bookings alike.
+  async function loadDashCalendar() {
+    const resp = await authFetch("/api/bookings?upcoming=1&limit=8");
+    const rows = await resp.json();
+    const box = document.getElementById("dash-calendar-list");
+    if (!Array.isArray(rows) || rows.length === 0) {
+      box.innerHTML = dashEmptyRow("Nothing coming up.");
+      return;
+    }
+    box.innerHTML = rows.map(function (b) {
+      const customerName = (b.customer_first_name || b.customer_last_name)
+        ? ((b.customer_first_name || "") + " " + (b.customer_last_name || "")).trim()
+        : (b.customer_email || "--");
+      return (
+        '<div class="dash-row">' +
+          '<div class="dash-row-main">' +
+            '<span class="dash-row-title">' + b.event_date + " -- " + (b.brand_name || "") + "</span>" +
+            '<span class="dash-row-meta">' + customerName + (b.package_name ? " -- " + b.package_name : "") + "</span>" +
+          "</div>" +
+          '<span class="status-pill ' + b.status + '">' + b.status + "</span>" +
+        "</div>"
+      );
+    }).join("");
+  }
+
+  // Bookings widget -- most recent activity across every brand, regardless
+  // of date, so it surfaces things that just came in or changed.
+  async function loadDashBookings() {
+    const resp = await authFetch("/api/bookings?limit=5");
+    const rows = await resp.json();
+    const box = document.getElementById("dash-bookings-list");
+    if (!Array.isArray(rows) || rows.length === 0) {
+      box.innerHTML = dashEmptyRow("No bookings yet.");
+      return;
+    }
+    box.innerHTML = rows.map(function (b) {
+      const customerName = (b.customer_first_name || b.customer_last_name)
+        ? ((b.customer_first_name || "") + " " + (b.customer_last_name || "")).trim()
+        : (b.customer_email || "--");
+      return (
+        '<div class="dash-row">' +
+          '<div class="dash-row-main">' +
+            '<span class="dash-row-title">' + customerName + "</span>" +
+            '<span class="dash-row-meta">' + (b.brand_name || "") + " -- " + b.event_date + "</span>" +
+          "</div>" +
+          '<span class="status-pill ' + b.status + '">' + b.status + "</span>" +
+        "</div>"
+      );
+    }).join("");
+  }
+
+  function populateTaskAssignee() {
+    if (!canAssignTasks) return;
+    const select = document.getElementById("new-task-assignee");
+    const active = staffCache.filter(function (s) { return s.is_active; });
+    select.innerHTML = ['<option value="">Myself</option>'].concat(
+      active.map(function (s) {
+        const name = ((s.first_name || "") + " " + (s.last_name || "")).trim() || s.email;
+        return '<option value="' + s.id + '">' + name + "</option>";
+      })
+    ).join("");
+  }
+
+  function showDashTaskStatus(kind, message) {
+    const el = document.getElementById("dash-task-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  function taskRowHtml(t) {
+    const isDone = t.status === "completed";
+    const meta = t.due_date ? "Due " + t.due_date : "No due date";
+    return (
+      '<div class="dash-row' + (isDone ? " completed" : "") + '" data-task-id="' + t.id + '">' +
+        '<label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">' +
+          '<input type="checkbox" data-task-toggle="' + t.id + '" ' + (isDone ? "checked" : "") + '>' +
+          '<span class="dash-row-main">' +
+            '<span class="dash-row-title">' + t.title + "</span>" +
+            '<span class="dash-row-meta">' + meta + "</span>" +
+          "</span>" +
+        "</label>" +
+        '<div class="dash-row-actions">' +
+          '<button class="btn-danger" data-task-delete="' + t.id + '">Delete</button>' +
+        "</div>" +
+      "</div>"
+    );
+  }
+
+  function renderDashTasks() {
+    const upcoming = myTasksCache.filter(function (t) { return t.status === "pending"; });
+    const completed = myTasksCache.filter(function (t) { return t.status === "completed"; })
+      .sort(function (a, b) { return (b.completed_at || "").localeCompare(a.completed_at || ""); });
+
+    const upcomingBox = document.getElementById("dash-tasks-upcoming");
+    const completedBox = document.getElementById("dash-tasks-completed");
+    upcomingBox.innerHTML = upcoming.length ? upcoming.map(taskRowHtml).join("") : dashEmptyRow("Nothing on your plate.");
+    completedBox.innerHTML = completed.length ? completed.map(taskRowHtml).join("") : dashEmptyRow("Nothing completed yet.");
+
+    document.querySelectorAll("[data-task-toggle]").forEach(function (input) {
+      input.addEventListener("change", async function () {
+        const id = this.dataset.taskToggle;
+        await authFetch("/api/tasks/" + id, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status: this.checked ? "completed" : "pending" })
+        });
+        loadDashTasks();
+      });
+    });
+    document.querySelectorAll("[data-task-delete]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        await authFetch("/api/tasks/" + btn.dataset.taskDelete, { method: "DELETE" });
+        loadDashTasks();
+      });
+    });
+  }
+
+  async function loadDashTasks() {
+    const resp = await authFetch("/api/tasks");
+    const rows = await resp.json();
+    myTasksCache = Array.isArray(rows) ? rows : [];
+    renderDashTasks();
+  }
+
+  document.getElementById("add-task-btn").addEventListener("click", async function () {
+    const title = document.getElementById("new-task-title").value.trim();
+    if (!title) { showDashTaskStatus("error", "Give the task a title first."); return; }
+
+    const payload = { title: title, due_date: document.getElementById("new-task-due").value || null };
+    if (canAssignTasks) {
+      const assignee = document.getElementById("new-task-assignee").value;
+      if (assignee) payload.assigned_to = Number(assignee);
+    }
+
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/tasks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        showDashTaskStatus("error", (data && data.error) || "Couldn't add that task.");
+        return;
+      }
+      document.getElementById("dash-task-status").className = "portal-status";
+      document.getElementById("new-task-title").value = "";
+      document.getElementById("new-task-due").value = "";
+      if (canAssignTasks) document.getElementById("new-task-assignee").value = "";
+      // A task assigned to someone else won't show in MY list -- only
+      // refresh here if it's still going to be mine.
+      if (!payload.assigned_to) loadDashTasks();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // -------------------------------------------------------------------
   // Branding
   // -------------------------------------------------------------------
   function brandingStatusId(brandId) { return "brand-status-" + brandId; }
@@ -708,9 +987,16 @@
         ? '<img src="' + API_BASE_URL + b.logo_url + '" alt="' + b.display_name + ' logo">'
         : '<span>No logo yet</span>';
       const color = b.primary_color || "#0e1a2b";
+      const isCoreBrand = ["rgml", "grinbear", "myplanningportal"].includes(b.slug);
+      const deleteBtn = (isSuperAdmin && !isCoreBrand)
+        ? '<button class="btn-danger" data-delete-brand="' + b.id + '">Delete brand</button>'
+        : "";
       return (
         '<div class="branding-card" data-brand-id="' + b.id + '">' +
-          "<h3>" + b.display_name + " <span style=\"font-weight:400;color:#6b6355;font-size:12px;\">(" + b.slug + ")</span></h3>" +
+          '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">' +
+            "<h3>" + b.display_name + " <span style=\"font-weight:400;color:#6b6355;font-size:12px;\">(" + b.slug + ")</span></h3>" +
+            deleteBtn +
+          "</div>" +
           '<div id="' + brandingStatusId(b.id) + '" class="portal-status"></div>' +
           '<div class="logo-row">' +
             '<div class="logo-preview' + (b.logo_url ? "" : " empty") + '">' + logoInner + "</div>" +
@@ -809,6 +1095,29 @@
         }
       });
     });
+
+    container.querySelectorAll("[data-delete-brand]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        const brandId = btn.dataset.deleteBrand;
+        const card = container.querySelector('.branding-card[data-brand-id="' + brandId + '"]');
+        const name = card ? card.querySelector("h3").textContent : "this brand";
+        if (!confirm("Delete " + name + "? This can't be undone.")) return;
+
+        btn.disabled = true;
+        try {
+          const resp = await authFetch("/api/brands/" + brandId, { method: "DELETE" });
+          const data = await resp.json().catch(function () { return null; });
+          if (!resp.ok) {
+            showBrandingStatus(brandId, "error", (data && data.error) || "Couldn't delete that brand.");
+            btn.disabled = false;
+            return;
+          }
+          await loadBrands();
+        } catch (err) {
+          btn.disabled = false;
+        }
+      });
+    });
   }
 
   // -------------------------------------------------------------------
@@ -824,6 +1133,14 @@
     const pkSelect = document.getElementById("pk-brand");
     const bkSelect = document.getElementById("bk-brand");
     const calSelect = document.getElementById("cal-brand");
+    // Reset each dropdown back to its static placeholder before
+    // repopulating -- loadBrands() runs again after every brand add,
+    // edit, or delete, and without this reset each of those re-runs would
+    // pile up duplicate <option> entries instead of replacing them.
+    filterSelect.innerHTML = '<option value="">All brands</option>';
+    pkSelect.innerHTML = '<option value="">Any brand</option>';
+    bkSelect.innerHTML = "";
+    calSelect.innerHTML = '<option value="">All brands</option>';
     brandsCache.forEach(function (b) {
       const opt1 = document.createElement("option");
       opt1.value = b.slug;
@@ -848,6 +1165,49 @@
 
     applyTopbarBranding();
     renderBrandingCards();
+  }
+
+  // Adding a brand outright (not just editing an existing one's branding)
+  // is super_admin only -- it's a structural change, so it gets its own
+  // gated panel rather than living inside every staffer's Branding view.
+  if (isSuperAdmin) {
+    document.getElementById("add-brand-panel").style.display = "block";
+
+    document.getElementById("add-brand-btn").addEventListener("click", async function () {
+      const name = document.getElementById("new-brand-name").value.trim();
+      const slug = document.getElementById("new-brand-slug").value.trim();
+      const domain = document.getElementById("new-brand-domain").value.trim();
+      const statusEl = document.getElementById("add-brand-status");
+
+      if (!name || !slug) {
+        statusEl.textContent = "Brand name and slug are both required.";
+        statusEl.className = "portal-status show error";
+        return;
+      }
+
+      const btn = this;
+      btn.disabled = true;
+      try {
+        const resp = await authFetch("/api/brands", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ display_name: name, slug: slug, portal_domain: domain || null })
+        });
+        const data = await resp.json().catch(function () { return null; });
+        if (!resp.ok) {
+          statusEl.textContent = (data && data.error) || "Couldn't add that brand.";
+          statusEl.className = "portal-status show error";
+          return;
+        }
+        statusEl.className = "portal-status";
+        document.getElementById("new-brand-name").value = "";
+        document.getElementById("new-brand-slug").value = "";
+        document.getElementById("new-brand-domain").value = "";
+        await loadBrands();
+      } finally {
+        btn.disabled = false;
+      }
+    });
   }
 
   function brandNameForSlug(slug) {
@@ -1794,17 +2154,39 @@
   }
 
   async function loadStaff() {
+    // Always fetches the FULL roster -- active and inactive alike. Any
+    // hiding of inactive accounts happens client-side in renderStaffTable,
+    // driven by the "Hide inactive" checkbox, so nobody ever silently
+    // disappears from this list.
     const resp = await authFetch("/api/staff");
     const rows = await resp.json();
     staffCache = Array.isArray(rows) ? rows : [];
+    renderStaffTable();
+  }
+
+  function renderStaffTable() {
+    const search = document.getElementById("staff-search").value.trim().toLowerCase();
+    const hideInactive = document.getElementById("staff-hide-inactive").checked;
+
+    const filtered = staffCache.filter(function (s) {
+      if (hideInactive && !s.is_active) return false;
+      if (!search) return true;
+      const name = ((s.first_name || "") + " " + (s.last_name || "")).toLowerCase();
+      const email = (s.email || "").toLowerCase();
+      return name.includes(search) || email.includes(search);
+    });
 
     const tbody = document.getElementById("staff-tbody");
     if (staffCache.length === 0) {
       tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No staff accounts yet.</div></td></tr>';
       return;
     }
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No staff match that search.</div></td></tr>';
+      return;
+    }
 
-    tbody.innerHTML = staffCache.map(function (s) {
+    tbody.innerHTML = filtered.map(function (s) {
       const isSelf = s.id === session.staff.id;
       const manageable = !isSelf && canManageRoleClient(myRole, s.role);
       const name = ((s.first_name || "") + " " + (s.last_name || "")).trim() || "--";
@@ -1881,6 +2263,8 @@
 
   if (canSeeStaff) {
     document.getElementById("cancel-staff-edit-btn").addEventListener("click", resetStaffForm);
+    document.getElementById("staff-search").addEventListener("input", renderStaffTable);
+    document.getElementById("staff-hide-inactive").addEventListener("change", renderStaffTable);
 
     document.getElementById("add-staff-btn").addEventListener("click", async function () {
       const email = document.getElementById("sf-email").value.trim();
@@ -1954,6 +2338,10 @@
     await loadVenues();
     if (canSeeVenuesClients) await loadClients();
     if (canSeeStaff) await loadStaff();
+    populateTaskAssignee();
+    await loadDashCalendar();
+    await loadDashBookings();
+    await loadDashTasks();
   })();
 </script>
 
