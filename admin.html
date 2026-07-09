@@ -20,6 +20,7 @@
       <button id="add-menu-toggle-btn" title="Add new">+</button>
       <div class="dropdown-menu" id="add-menu">
         <button class="dropdown-item" id="add-menu-new-booking">New booking</button>
+        <button class="dropdown-item" id="add-menu-new-task">New task</button>
       </div>
     </div>
     <div class="settings-dropdown">
@@ -786,6 +787,16 @@
     panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
   document.getElementById("add-menu-new-booking").addEventListener("click", openNewBookingForm);
+
+  function openNewTaskForm() {
+    document.getElementById("add-menu").classList.remove("open");
+    showPanel("home");
+    const widget = document.getElementById("widget-tasks");
+    widget.classList.add("show");
+    widget.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    document.getElementById("new-task-title").focus();
+  }
+  document.getElementById("add-menu-new-task").addEventListener("click", openNewTaskForm);
 
   document.getElementById("cancel-new-booking-btn").addEventListener("click", function () {
     document.getElementById("new-booking-panel").style.display = "none";
