@@ -27,7 +27,7 @@
       <button id="settings-toggle-btn">Settings <i class="ti" style="font-style:normal;">&#9662;</i></button>
       <div class="dropdown-menu" id="settings-menu">
         <button class="dropdown-item" data-tab="account">Account details</button>
-        <button class="dropdown-item" data-tab="branding">Branding</button>
+        <button class="dropdown-item" data-tab="company">Company settings</button>
         <button class="dropdown-item" data-tab="staff">Staff</button>
         <button class="dropdown-item" data-tab="clients">Clients</button>
         <button class="dropdown-item" data-tab="venues">Venues</button>
@@ -430,10 +430,10 @@
     </div>
   </div>
 
-  <!-- ============================== Branding ============================== -->
-  <div class="admin-panel" id="panel-branding">
-    <h1>Branding</h1>
-    <p class="section-sub">Logo, name, and accent color for each brand. The myplanningportal brand controls the logo shown here in Admin and on the customer login/dashboard.</p>
+  <!-- ============================== Company settings ============================== -->
+  <div class="admin-panel" id="panel-company">
+    <h1>Company settings</h1>
+    <p class="section-sub">Branding for each brand -- logo, name, and accent color. The myplanningportal brand controls the logo shown here in Admin and on the customer login/dashboard.</p>
 
     <div id="branding-cards"></div>
 
@@ -690,7 +690,7 @@
 
   function applyRoleVisibility() {
     if (!canEditBranding) {
-      const b = document.querySelector('.dropdown-item[data-tab="branding"]');
+      const b = document.querySelector('.dropdown-item[data-tab="company"]');
       if (b) b.style.display = "none";
     }
     if (!canSeeEquipment) {
@@ -1445,7 +1445,7 @@
 
   // Adding a brand outright (not just editing an existing one's branding)
   // is super_admin only -- it's a structural change, so it gets its own
-  // gated panel rather than living inside every staffer's Branding view.
+  // gated panel rather than living inside every staffer's Company settings view.
   if (isSuperAdmin) {
     document.getElementById("add-brand-panel").style.display = "block";
 
