@@ -59,7 +59,21 @@
     <div class="dash-widgets">
       <div class="dash-widget" id="widget-calendar">
         <h3>Calendar &ndash; leads &amp; bookings</h3>
-        <div id="dash-calendar-list" class="dash-list"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button class="btn-secondary" id="dash-cal-prev-btn">&larr;</button>
+            <div id="dash-cal-month-label" style="font-family:'Fraunces',serif;font-size:14px;font-weight:500;min-width:130px;text-align:center;"></div>
+            <button class="btn-secondary" id="dash-cal-next-btn">&rarr;</button>
+          </div>
+          <button class="btn-secondary" id="dash-cal-today-btn">Today</button>
+        </div>
+        <div class="calendar-legend">
+          <span class="status-pill inquiry">Inquiry</span>
+          <span class="status-pill booked">Booked</span>
+          <span class="status-pill completed">Completed</span>
+          <span class="status-pill cancelled">Cancelled</span>
+        </div>
+        <div class="calendar-grid" id="dash-calendar-grid"></div>
       </div>
 
       <div class="dash-widget" id="widget-tasks">
@@ -831,31 +845,115 @@
     return '<div class="empty-state" style="padding:20px 0;">' + message + '</div>';
   }
 
-  // Calendar widget -- soonest-first agenda of everything not yet passed
-  // or cancelled, leads (inquiry) and confirmed bookings alike.
+  // Calendar widget -- a real monthly grid (same layout/markup as the full
+  // Calendar tab), covering every lead and booking, navigable month to
+  // month. Clicking an event doesn't do the in-page accordion thing the
+  // Bookings tab does -- it opens that booking's own page in a new tab, so
+  // you can pull up several at once and compare, or keep the dashboard
+  // where it is while you work on one.
+  let dashCalendarBookingsCache = [];
+  let dashCalendarViewDate = new Date();
+
+  function wireDashCalendarPillClicks(root) {
+    root.querySelectorAll(".cal-booking-pill").forEach(function (el) {
+      el.addEventListener("click", function () {
+        window.open("booking-detail.html?id=" + el.dataset.id, "_blank");
+      });
+    });
+  }
+
   async function loadDashCalendar() {
-    const resp = await authFetch("/api/bookings?upcoming=1&limit=8");
+    const resp = await authFetch("/api/bookings");
     const rows = await resp.json();
-    const box = document.getElementById("dash-calendar-list");
-    if (!Array.isArray(rows) || rows.length === 0) {
-      box.innerHTML = dashEmptyRow("Nothing coming up.");
-      return;
+    dashCalendarBookingsCache = Array.isArray(rows) ? rows : [];
+    renderDashCalendar();
+  }
+
+  function renderDashCalendar() {
+    const year = dashCalendarViewDate.getFullYear();
+    const month = dashCalendarViewDate.getMonth();
+    document.getElementById("dash-cal-month-label").textContent = MONTH_NAMES[month] + " " + year;
+
+    const startDow = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+    const todayStr = isoDate(new Date());
+
+    const byDate = {};
+    dashCalendarBookingsCache.forEach(function (b) {
+      if (!byDate[b.event_date]) byDate[b.event_date] = [];
+      byDate[b.event_date].push(b);
+    });
+
+    const totalCells = Math.ceil((startDow + daysInMonth) / 7) * 7;
+    const cells = [];
+    for (let i = 0; i < totalCells; i++) {
+      const dayNum = i - startDow + 1;
+      let cellDate, otherMonth = false;
+      if (dayNum < 1) {
+        cellDate = new Date(year, month - 1, daysInPrevMonth + dayNum);
+        otherMonth = true;
+      } else if (dayNum > daysInMonth) {
+        cellDate = new Date(year, month + 1, dayNum - daysInMonth);
+        otherMonth = true;
+      } else {
+        cellDate = new Date(year, month, dayNum);
+      }
+      const dateStr = isoDate(cellDate);
+      cells.push({
+        dateStr: dateStr,
+        dayLabel: cellDate.getDate(),
+        otherMonth: otherMonth,
+        isToday: dateStr === todayStr,
+        bookings: byDate[dateStr] || []
+      });
     }
-    box.innerHTML = rows.map(function (b) {
-      const customerName = (b.customer_first_name || b.customer_last_name)
-        ? ((b.customer_first_name || "") + " " + (b.customer_last_name || "")).trim()
-        : (b.customer_email || "--");
+
+    let html = DOW_LABELS.map(function (d) { return '<div class="cal-dow">' + d + "</div>"; }).join("");
+
+    html += cells.map(function (c) {
+      const visible = c.bookings.slice(0, 3);
+      const overflow = c.bookings.length - visible.length;
+      const pills = visible.map(bookingPillHtml).join("");
+      const more = overflow > 0 ? '<div class="cal-more" data-date="' + c.dateStr + '">+' + overflow + " more</div>" : "";
+      const classes = "cal-day" + (c.otherMonth ? " other-month" : "") + (c.isToday ? " today" : "");
       return (
-        '<div class="dash-row">' +
-          '<div class="dash-row-main">' +
-            '<span class="dash-row-title">' + b.event_date + " -- " + (b.brand_name || "") + "</span>" +
-            '<span class="dash-row-meta">' + customerName + (b.package_name ? " -- " + b.package_name : "") + "</span>" +
-          "</div>" +
-          '<span class="status-pill ' + b.status + '">' + b.status + "</span>" +
+        '<div class="' + classes + '" data-date="' + c.dateStr + '">' +
+          '<div class="cal-day-num">' + c.dayLabel + "</div>" +
+          '<div class="cal-day-bookings">' + pills + more + "</div>" +
         "</div>"
       );
     }).join("");
+
+    const grid = document.getElementById("dash-calendar-grid");
+    grid.innerHTML = html;
+    wireDashCalendarPillClicks(grid);
+
+    grid.querySelectorAll(".cal-more").forEach(function (el) {
+      el.addEventListener("click", function () {
+        const dateStr = el.dataset.date;
+        const cell = grid.querySelector('.cal-day[data-date="' + dateStr + '"]');
+        if (!cell) return;
+        const dayBookings = dashCalendarBookingsCache.filter(function (b) { return b.event_date === dateStr; });
+        const box = cell.querySelector(".cal-day-bookings");
+        box.innerHTML = dayBookings.map(bookingPillHtml).join("");
+        wireDashCalendarPillClicks(box);
+      });
+    });
   }
+
+  document.getElementById("dash-cal-prev-btn").addEventListener("click", function () {
+    dashCalendarViewDate = new Date(dashCalendarViewDate.getFullYear(), dashCalendarViewDate.getMonth() - 1, 1);
+    renderDashCalendar();
+  });
+  document.getElementById("dash-cal-next-btn").addEventListener("click", function () {
+    dashCalendarViewDate = new Date(dashCalendarViewDate.getFullYear(), dashCalendarViewDate.getMonth() + 1, 1);
+    renderDashCalendar();
+  });
+  document.getElementById("dash-cal-today-btn").addEventListener("click", function () {
+    dashCalendarViewDate = new Date();
+    renderDashCalendar();
+  });
 
   // Bookings widget -- most recent activity across every brand, regardless
   // of date, so it surfaces things that just came in or changed.
