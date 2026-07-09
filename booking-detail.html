@@ -26,8 +26,17 @@
   <div id="load-error" class="portal-status" style="margin-bottom:16px;"></div>
 
   <div id="booking-detail-content" style="display:none;">
-    <h1 id="detail-title" style="margin-bottom:2px;"></h1>
-    <p class="section-sub" id="detail-sub"></p>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+      <div>
+        <h1 id="detail-title" style="margin-bottom:2px;"></h1>
+        <p class="section-sub" id="detail-sub"></p>
+      </div>
+      <button class="btn-secondary" id="login-link-btn" style="white-space:nowrap;">Generate login link</button>
+    </div>
+    <div id="login-link-status" class="portal-status"></div>
+    <div id="login-link-box" style="display:none;margin:-6px 0 16px;">
+      <input type="text" id="login-link-value" readonly style="font-size:12px;">
+    </div>
 
     <div id="save-status" class="portal-status"></div>
 
@@ -226,6 +235,7 @@
 
   let packagesCache = [];
   let bookingBrandSlug = null;
+  let bookingCustomerId = null;
 
   async function loadPackagesAndVenues() {
     const [pkgResp, venueResp] = await Promise.all([
@@ -267,6 +277,11 @@
     }
     const b = await resp.json();
     bookingBrandSlug = b.brand_slug;
+    bookingCustomerId = b.customer_id || null;
+
+    document.getElementById("login-link-btn").style.display = canEditBookings ? "" : "none";
+    document.getElementById("login-link-btn").disabled = !bookingCustomerId;
+    document.getElementById("login-link-btn").title = bookingCustomerId ? "" : "This booking has no client on file yet.";
 
     const customerName = ((b.customer_first_name || "") + " " + (b.customer_last_name || "")).trim() || "No name on file";
     document.getElementById("detail-title").textContent = "#" + b.id + " -- " + (b.brand_name || "");
@@ -318,6 +333,57 @@
       el.className = "portal-status show error";
     });
   }
+
+  // -------------------------------------------------------------------
+  // Login link -- a one-time sign-in link for the customer that bypasses
+  // their password entirely. Sales+ only; the copy goes straight to the
+  // clipboard (and into a read-only field as a fallback) rather than being
+  // emailed, so it doesn't depend on Resend/domain verification being set
+  // up. See createStaffLoginLink() in customer-auth.js for how the token
+  // itself works -- short version: no expiration, single-use.
+  // -------------------------------------------------------------------
+  document.getElementById("login-link-btn").addEventListener("click", async function () {
+    if (!bookingCustomerId) return;
+    const btn = this;
+    const statusEl = document.getElementById("login-link-status");
+    btn.disabled = true;
+    btn.textContent = "Generating...";
+    try {
+      const resp = await authFetch("/api/customers/" + bookingCustomerId + "/login-link", { method: "POST" });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        statusEl.textContent = (data && data.error) || "Couldn't generate a login link.";
+        statusEl.className = "portal-status show error";
+        return;
+      }
+
+      const link = PORTAL_BASE_URL.replace(/\/$/, "") + "/verify-email.html?token=" + data.token;
+      const box = document.getElementById("login-link-box");
+      const input = document.getElementById("login-link-value");
+      input.value = link;
+      box.style.display = "block";
+      input.select();
+
+      let copied = false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(link);
+          copied = true;
+        }
+      } catch (err) { /* clipboard permission denied -- the field below still has it selected to copy manually */ }
+
+      statusEl.textContent = copied
+        ? "Link copied to your clipboard -- it doesn't expire, and works once."
+        : "Link generated below -- select and copy it (it doesn't expire, and works once).";
+      statusEl.className = "portal-status show success";
+    } catch (err) {
+      statusEl.textContent = "Couldn't reach the server. Check your connection and try again.";
+      statusEl.className = "portal-status show error";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Generate login link";
+    }
+  });
 
   // -------------------------------------------------------------------
   // Contract (sales+ can upload; anyone can view)
