@@ -184,6 +184,12 @@ textarea {
   font-family: inherit;
 }
 
+#who-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 #add-menu-toggle-btn {
   width: 28px;
   height: 28px;
