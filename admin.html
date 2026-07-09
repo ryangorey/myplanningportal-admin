@@ -511,12 +511,12 @@
     <div class="filter-bar">
       <div style="flex:1;">
         <label for="client-search">Search</label>
-        <input type="text" id="client-search" placeholder="Name, email, or phone">
+        <input type="text" id="client-search" placeholder="Name, organization, email, or phone">
       </div>
     </div>
 
     <table class="admin-table">
-      <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th></th></tr></thead>
+      <thead><tr><th>Name</th><th>Organization</th><th>Email</th><th>Phone</th><th></th></tr></thead>
       <tbody id="clients-tbody"></tbody>
     </table>
 
@@ -527,15 +527,28 @@
         <div><label>Last name</label><input type="text" id="edit-client-last-name"></div>
         <div><label>Email</label><input type="email" id="edit-client-email"></div>
         <div><label>Phone</label><input type="text" id="edit-client-phone"></div>
-        <div class="full" id="client-bookings-list" style="font-size:13px;color:#6b6355;"></div>
+        <div class="full"><label>Organization</label><input type="text" id="edit-client-organization" placeholder="optional"></div>
       </div>
       <div style="display:flex;gap:10px;margin-bottom:20px;">
         <button class="btn-primary" id="save-client-btn">Save changes</button>
         <button class="btn-secondary" id="close-client-detail-btn">Close</button>
       </div>
 
+      <p class="dash-subhead">Upcoming events</p>
+      <div id="client-upcoming-events" class="dash-list" style="margin-bottom:20px;"></div>
+
+      <p class="dash-subhead">Past events</p>
+      <div id="client-past-events" class="dash-list" style="margin-bottom:20px;"></div>
+
       <p class="dash-subhead">Assigned tasks</p>
-      <div id="client-tasks-list" class="dash-list" style="margin-bottom:20px;"></div>
+      <div id="client-tasks-list" class="dash-list" style="margin-bottom:12px;"></div>
+      <div id="client-task-status" class="portal-status"></div>
+      <div class="form-grid" style="margin-bottom:10px;">
+        <div class="full"><label>New task</label><input type="text" id="client-task-title" placeholder="Task title"></div>
+        <div><label>Due date</label><input type="date" id="client-task-due"></div>
+        <div id="client-task-assign-wrap" style="display:none;"><label>Assign to</label><select id="client-task-assignee"></select></div>
+      </div>
+      <button class="btn-secondary" id="add-client-task-btn" style="margin-bottom:20px;">Add task</button>
 
       <p class="dash-subhead">CRM &ndash; contact log</p>
       <div id="client-contacts-list" class="dash-list" style="margin-bottom:14px;"></div>
@@ -564,6 +577,7 @@
         <div><label>Last name</label><input type="text" id="new-client-last-name" placeholder="optional"></div>
         <div><label>Email</label><input type="email" id="new-client-email"></div>
         <div><label>Phone</label><input type="text" id="new-client-phone" placeholder="optional"></div>
+        <div class="full"><label>Organization</label><input type="text" id="new-client-organization" placeholder="optional"></div>
       </div>
       <div style="display:flex;gap:10px;">
         <button class="btn-primary" id="add-client-btn">Add client</button>
@@ -710,6 +724,7 @@
     }
     if (canAssignTasks) {
       document.getElementById("new-task-assign-wrap").style.display = "";
+      document.getElementById("client-task-assign-wrap").style.display = "";
     }
     if (canSeeVenuesClients) {
       document.getElementById("new-task-client-wrap").style.display = "";
@@ -1039,9 +1054,9 @@
     }).join("");
   }
 
-  function populateTaskAssignee() {
-    if (!canAssignTasks) return;
-    const select = document.getElementById("new-task-assignee");
+  function fillAssigneeSelect(selectId) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
     const active = staffCache.filter(function (s) { return s.is_active; });
     select.innerHTML = ['<option value="">Myself</option>'].concat(
       active.map(function (s) {
@@ -1049,6 +1064,12 @@
         return '<option value="' + s.id + '">' + name + "</option>";
       })
     ).join("");
+  }
+
+  function populateTaskAssignee() {
+    if (!canAssignTasks) return;
+    fillAssigneeSelect("new-task-assignee");
+    fillAssigneeSelect("client-task-assignee");
   }
 
   function showDashTaskStatus(kind, message) {
@@ -1923,7 +1944,7 @@
 
     const tbody = document.getElementById("clients-tbody");
     if (clientsCache.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4"><div class="empty-state">No clients found.</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No clients found.</div></td></tr>';
       return;
     }
 
@@ -1931,6 +1952,7 @@
       return (
         '<tr class="row-clickable" data-id="' + c.id + '">' +
           "<td>" + (clientName(c) || "--") + "</td>" +
+          "<td>" + (c.organization || "--") + "</td>" +
           "<td>" + (c.email || "--") + "</td>" +
           "<td>" + (c.phone || "--") + "</td>" +
           "<td></td>" +
@@ -1959,21 +1981,45 @@
     document.getElementById("edit-client-last-name").value = c.last_name || "";
     document.getElementById("edit-client-email").value = c.email || "";
     document.getElementById("edit-client-phone").value = c.phone || "";
+    document.getElementById("edit-client-organization").value = c.organization || "";
 
-    const bookingsList = document.getElementById("client-bookings-list");
-    if (Array.isArray(c.bookings) && c.bookings.length) {
-      bookingsList.innerHTML = "<strong>Past bookings:</strong> " + c.bookings.map(function (b) {
-        return b.event_date + " -- " + (b.brand_name || "") + (b.package_name ? " (" + b.package_name + ")" : "") + " -- " + b.status;
-      }).join("; ");
-    } else {
-      bookingsList.textContent = "No bookings yet.";
-    }
+    renderClientEvents(c.bookings);
 
     document.getElementById("client-detail").classList.add("open");
     document.getElementById("client-detail").scrollIntoView({ behavior: "smooth", block: "nearest" });
 
     await loadClientTasks(id);
     await loadClientContacts(id);
+  }
+
+  // Splits a client's booking history into what's still coming up
+  // (soonest first, cancelled excluded) versus everything already past or
+  // cancelled -- same dash-row look as the Home dashboard's widgets.
+  function clientEventRowHtml(b) {
+    return (
+      '<div class="dash-row">' +
+        '<div class="dash-row-main">' +
+          '<span class="dash-row-title">' + b.event_date + " -- " + (b.brand_name || "") + "</span>" +
+          '<span class="dash-row-meta">' + (b.package_name || "No package") + " -- " + money(b.package_total) + "</span>" +
+        "</div>" +
+        '<span class="status-pill ' + b.status + '">' + b.status + "</span>" +
+      "</div>"
+    );
+  }
+
+  function renderClientEvents(bookings) {
+    const upcomingBox = document.getElementById("client-upcoming-events");
+    const pastBox = document.getElementById("client-past-events");
+    const all = Array.isArray(bookings) ? bookings : [];
+    const todayStr = isoDate(new Date());
+
+    const upcoming = all
+      .filter(function (b) { return b.event_date >= todayStr && b.status !== "cancelled"; })
+      .sort(function (a, b) { return a.event_date.localeCompare(b.event_date); });
+    const past = all.filter(function (b) { return b.event_date < todayStr || b.status === "cancelled"; });
+
+    upcomingBox.innerHTML = upcoming.length ? upcoming.map(clientEventRowHtml).join("") : dashEmptyRow("No upcoming events.");
+    pastBox.innerHTML = past.length ? past.map(clientEventRowHtml).join("") : dashEmptyRow("No past events.");
   }
 
   document.getElementById("close-client-detail-btn").addEventListener("click", function () {
@@ -2008,6 +2054,50 @@
       );
     }).join("");
   }
+
+  function showClientTaskStatus(kind, message) {
+    const el = document.getElementById("client-task-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  document.getElementById("add-client-task-btn").addEventListener("click", async function () {
+    if (!openClientId) return;
+    const title = document.getElementById("client-task-title").value.trim();
+    if (!title) { showClientTaskStatus("error", "Give the task a title first."); return; }
+
+    const payload = {
+      title: title,
+      due_date: document.getElementById("client-task-due").value || null,
+      customer_id: openClientId
+    };
+    if (canAssignTasks) {
+      const assignee = document.getElementById("client-task-assignee").value;
+      if (assignee) payload.assigned_to = Number(assignee);
+    }
+
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/tasks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        showClientTaskStatus("error", (data && data.error) || "Couldn't add that task.");
+        return;
+      }
+      document.getElementById("client-task-status").className = "portal-status";
+      document.getElementById("client-task-title").value = "";
+      document.getElementById("client-task-due").value = "";
+      if (canAssignTasks) document.getElementById("client-task-assignee").value = "";
+      await loadClientTasks(openClientId);
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   function contactTypeLabel(type) {
     return { call: "Call", email: "Email", meeting: "Meeting", note: "Note" }[type] || type;
@@ -2089,7 +2179,8 @@
           first_name: document.getElementById("edit-client-first-name").value.trim() || null,
           last_name: document.getElementById("edit-client-last-name").value.trim() || null,
           email: document.getElementById("edit-client-email").value.trim(),
-          phone: document.getElementById("edit-client-phone").value.trim() || null
+          phone: document.getElementById("edit-client-phone").value.trim() || null,
+          organization: document.getElementById("edit-client-organization").value.trim() || null
         })
       });
       if (!resp.ok) return;
@@ -2130,7 +2221,8 @@
           email: email,
           first_name: document.getElementById("new-client-first-name").value.trim() || null,
           last_name: document.getElementById("new-client-last-name").value.trim() || null,
-          phone: document.getElementById("new-client-phone").value.trim() || null
+          phone: document.getElementById("new-client-phone").value.trim() || null,
+          organization: document.getElementById("new-client-organization").value.trim() || null
         })
       });
       const data = await resp.json().catch(function () { return null; });
@@ -2141,6 +2233,7 @@
       document.getElementById("add-client-status").className = "portal-status";
       document.getElementById("new-client-first-name").value = "";
       document.getElementById("new-client-last-name").value = "";
+      document.getElementById("new-client-organization").value = "";
       document.getElementById("new-client-email").value = "";
       document.getElementById("new-client-phone").value = "";
       await loadClients();
