@@ -48,6 +48,7 @@
   <button class="admin-tab active" data-tab="home">Home</button>
   <button class="admin-tab" data-tab="bookings">Bookings</button>
   <button class="admin-tab" data-tab="calendar">Calendar</button>
+  <button class="admin-tab" data-tab="leads">Leads</button>
   <button class="admin-tab" data-tab="equipment">Equipment</button>
   <button class="admin-tab" data-tab="packages">Packages</button>
 </div>
@@ -316,6 +317,97 @@
     </div>
 
     <div class="calendar-grid" id="calendar-grid"></div>
+  </div>
+
+  <!-- ============================== Leads ============================== -->
+  <div class="admin-panel" id="panel-leads">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h1>Leads</h1>
+        <p class="section-sub">Prospects working their way through the pipeline.</p>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <button class="btn-secondary" id="toggle-pipeline-config-btn">Configure pipeline</button>
+        <button class="btn-secondary" id="toggle-add-lead-btn">+ Add lead</button>
+      </div>
+    </div>
+
+    <div class="filter-bar">
+      <div style="flex:1;">
+        <label for="lead-search">Search</label>
+        <input type="text" id="lead-search" placeholder="Name, organization, email, or phone">
+      </div>
+      <div>
+        <label for="lead-filter-brand">Brand</label>
+        <select id="lead-filter-brand"><option value="">All brands</option></select>
+      </div>
+    </div>
+
+    <div class="add-panel" id="pipeline-config-panel" style="display:none;">
+      <h3>Pipeline stages</h3>
+      <p class="section-sub" style="margin-bottom:14px;">Add, rename, reorder, or retire the stages leads move through. A stage with leads still in it can't be deleted until they're moved out.</p>
+      <div id="pipeline-config-status" class="portal-status"></div>
+      <div id="pipeline-stage-rows"></div>
+      <div class="form-grid" style="margin-top:14px;">
+        <div><label>New stage name</label><input type="text" id="new-stage-name" placeholder="e.g. Follow-up"></div>
+        <div><label>Color</label><input type="color" id="new-stage-color" value="#3a4a60"></div>
+      </div>
+      <button class="btn-secondary" id="add-stage-btn" style="margin-top:10px;">Add stage</button>
+    </div>
+
+    <div class="add-panel" id="add-lead-panel" style="display:none;">
+      <h3>Add lead</h3>
+      <div id="add-lead-status" class="portal-status"></div>
+      <div class="form-grid">
+        <div><label>Brand</label><select id="lead-brand"></select></div>
+        <div><label>Source</label><input type="text" id="lead-source" placeholder="e.g. Website, Referral"></div>
+        <div><label>First name</label><input type="text" id="lead-first-name" placeholder="optional"></div>
+        <div><label>Last name</label><input type="text" id="lead-last-name" placeholder="optional"></div>
+        <div><label>Email</label><input type="email" id="lead-email" placeholder="optional"></div>
+        <div><label>Phone</label><input type="text" id="lead-phone" placeholder="optional"></div>
+        <div class="full"><label>Organization</label><input type="text" id="lead-organization" placeholder="optional"></div>
+        <div><label>Target event date</label><input type="date" id="lead-event-date"></div>
+        <div><label>Estimated value</label><input type="number" step="0.01" id="lead-estimated-value" placeholder="optional"></div>
+        <div id="lead-assign-wrap" style="display:none;"><label>Assign to</label><select id="lead-assignee"><option value="">Unassigned</option></select></div>
+        <div class="full" id="lead-client-wrap">
+          <label>Link to existing client (optional)</label>
+          <input type="text" id="lead-client-search" placeholder="Type a name or email to link this lead to a client...">
+          <input type="hidden" id="lead-client-id" value="">
+          <div id="lead-client-results" style="display:none;background:#fff;border:0.5px solid #d8d2c4;border-radius:6px;margin:-10px 0 14px;max-height:160px;overflow-y:auto;"></div>
+        </div>
+        <div class="full"><label>Notes</label><textarea id="lead-notes" placeholder="optional"></textarea></div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="add-lead-btn">Add lead</button>
+        <button class="btn-secondary" id="cancel-add-lead-btn">Cancel</button>
+      </div>
+    </div>
+
+    <div class="pipeline-board" id="pipeline-board"></div>
+
+    <div class="add-panel" id="lead-detail-panel" style="display:none;">
+      <h3 id="lead-detail-title">Lead</h3>
+      <div id="lead-detail-status" class="portal-status"></div>
+      <div class="form-grid">
+        <div><label>Brand</label><select id="edit-lead-brand"></select></div>
+        <div><label>Stage</label><select id="edit-lead-stage"></select></div>
+        <div><label>First name</label><input type="text" id="edit-lead-first-name"></div>
+        <div><label>Last name</label><input type="text" id="edit-lead-last-name"></div>
+        <div><label>Email</label><input type="email" id="edit-lead-email"></div>
+        <div><label>Phone</label><input type="text" id="edit-lead-phone"></div>
+        <div class="full"><label>Organization</label><input type="text" id="edit-lead-organization"></div>
+        <div><label>Target event date</label><input type="date" id="edit-lead-event-date"></div>
+        <div><label>Estimated value</label><input type="number" step="0.01" id="edit-lead-estimated-value"></div>
+        <div><label>Source</label><input type="text" id="edit-lead-source"></div>
+        <div id="edit-lead-assign-wrap" style="display:none;"><label>Assign to</label><select id="edit-lead-assignee"><option value="">Unassigned</option></select></div>
+        <div class="full"><label>Notes</label><textarea id="edit-lead-notes"></textarea></div>
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="save-lead-btn">Save changes</button>
+        <button class="btn-danger" id="delete-lead-btn">Delete lead</button>
+        <button class="btn-secondary" id="close-lead-detail-btn">Close</button>
+      </div>
+    </div>
   </div>
 
   <!-- ============================== Equipment ============================== -->
@@ -693,6 +785,7 @@
   const canSeeStaff = roleAtLeast(myRole, "admin");
   const canEditBranding = roleAtLeast(myRole, "admin");
   const canAssignTasks = roleAtLeast(myRole, "admin");
+  const canConfigurePipeline = roleAtLeast(myRole, "admin");
   const isSuperAdmin = myRole === "super_admin";
 
   function applyRoleVisibility() {
@@ -711,8 +804,13 @@
     if (!canSeeVenuesClients) {
       const c = document.querySelector('.dropdown-item[data-tab="clients"]');
       const v = document.querySelector('.dropdown-item[data-tab="venues"]');
+      const l = document.querySelector('.admin-tab[data-tab="leads"]');
       if (c) c.style.display = "none";
       if (v) v.style.display = "none";
+      if (l) l.style.display = "none";
+    }
+    if (!canConfigurePipeline) {
+      document.getElementById("toggle-pipeline-config-btn").style.display = "none";
     }
     if (!canSeeStaff) {
       const s = document.querySelector('.dropdown-item[data-tab="staff"]');
@@ -733,6 +831,8 @@
     if (canAssignTasks) {
       document.getElementById("new-task-assign-wrap").style.display = "";
       document.getElementById("client-task-assign-wrap").style.display = "";
+      document.getElementById("lead-assign-wrap").style.display = "";
+      document.getElementById("edit-lead-assign-wrap").style.display = "";
     }
     if (canSeeVenuesClients) {
       document.getElementById("new-task-client-wrap").style.display = "";
@@ -1078,11 +1178,11 @@
     }).join("");
   }
 
-  function fillAssigneeSelect(selectId) {
+  function fillAssigneeSelect(selectId, unassignedLabel) {
     const select = document.getElementById(selectId);
     if (!select) return;
     const active = staffCache.filter(function (s) { return s.is_active; });
-    select.innerHTML = ['<option value="">Myself</option>'].concat(
+    select.innerHTML = ['<option value="">' + (unassignedLabel || "Myself") + "</option>"].concat(
       active.map(function (s) {
         const name = ((s.first_name || "") + " " + (s.last_name || "")).trim() || s.email;
         return '<option value="' + s.id + '">' + name + "</option>";
@@ -1422,6 +1522,9 @@
     const pkSelect = document.getElementById("pk-brand");
     const bkSelect = document.getElementById("bk-brand");
     const calSelect = document.getElementById("cal-brand");
+    const leadBrandSelect = document.getElementById("lead-brand");
+    const editLeadBrandSelect = document.getElementById("edit-lead-brand");
+    const leadFilterBrandSelect = document.getElementById("lead-filter-brand");
     // Reset each dropdown back to its static placeholder before
     // repopulating -- loadBrands() runs again after every brand add,
     // edit, or delete, and without this reset each of those re-runs would
@@ -1430,6 +1533,9 @@
     pkSelect.innerHTML = '<option value="">Any brand</option>';
     bkSelect.innerHTML = "";
     calSelect.innerHTML = '<option value="">All brands</option>';
+    leadBrandSelect.innerHTML = "";
+    editLeadBrandSelect.innerHTML = "";
+    leadFilterBrandSelect.innerHTML = '<option value="">All brands</option>';
     brandsCache.forEach(function (b) {
       const opt1 = document.createElement("option");
       opt1.value = b.slug;
@@ -1450,6 +1556,21 @@
       opt4.value = b.slug;
       opt4.textContent = b.display_name;
       calSelect.appendChild(opt4);
+
+      const opt5 = document.createElement("option");
+      opt5.value = b.id;
+      opt5.textContent = b.display_name;
+      leadBrandSelect.appendChild(opt5);
+
+      const opt6 = document.createElement("option");
+      opt6.value = b.id;
+      opt6.textContent = b.display_name;
+      editLeadBrandSelect.appendChild(opt6);
+
+      const opt7 = document.createElement("option");
+      opt7.value = b.id;
+      opt7.textContent = b.display_name;
+      leadFilterBrandSelect.appendChild(opt7);
     });
 
     applyTopbarBranding();
@@ -1878,6 +1999,536 @@
     renderCalendar();
   });
   document.getElementById("cal-brand").addEventListener("change", loadCalendarBookings);
+
+  // -------------------------------------------------------------------
+  // Leads pipeline -- a configurable set of stages (admin+ manages the
+  // columns themselves via the "Configure pipeline" panel) that leads move
+  // through on their way to becoming a booking or getting marked lost.
+  // Sales+ only, same bar as Clients/Venues.
+  // -------------------------------------------------------------------
+  let pipelineStagesCache = [];
+  let leadsCache = [];
+  let openLeadId = null;
+
+  function leadName(l) {
+    return ((l.first_name || "") + " " + (l.last_name || "")).trim();
+  }
+
+  function leadCardTitle(l) {
+    return leadName(l) || l.organization || l.email || ("Lead #" + l.id);
+  }
+
+  function fillStageSelect(selectId) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    select.innerHTML = "";
+    pipelineStagesCache.forEach(function (s) {
+      const opt = document.createElement("option");
+      opt.value = s.id;
+      opt.textContent = s.name;
+      select.appendChild(opt);
+    });
+  }
+
+  function populateLeadAssignee() {
+    if (!canAssignTasks) return;
+    fillAssigneeSelect("lead-assignee", "Unassigned");
+    fillAssigneeSelect("edit-lead-assignee", "Unassigned");
+  }
+
+  // ---- Pipeline stage configuration (admin+) ----
+
+  function showPipelineConfigStatus(kind, message) {
+    const el = document.getElementById("pipeline-config-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  async function loadPipelineStages() {
+    const resp = await authFetch("/api/pipeline-stages");
+    const rows = await resp.json();
+    pipelineStagesCache = Array.isArray(rows) ? rows : [];
+    renderPipelineConfig();
+    fillStageSelect("edit-lead-stage");
+    renderPipelineBoard();
+  }
+
+  function renderPipelineConfig() {
+    const container = document.getElementById("pipeline-stage-rows");
+    container.innerHTML = "";
+    pipelineStagesCache.forEach(function (s, index) {
+      const row = document.createElement("div");
+      row.className = "stage-row";
+
+      const colorInput = document.createElement("input");
+      colorInput.type = "color";
+      colorInput.value = s.color || "#3a4a60";
+      colorInput.addEventListener("change", function () {
+        savePipelineStage(s.id, { color: colorInput.value });
+      });
+      row.appendChild(colorInput);
+
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.className = "stage-name-input";
+      nameInput.value = s.name;
+      nameInput.addEventListener("change", function () {
+        const v = nameInput.value.trim();
+        if (!v) { nameInput.value = s.name; return; }
+        savePipelineStage(s.id, { name: v });
+      });
+      row.appendChild(nameInput);
+
+      const wonLabel = document.createElement("label");
+      wonLabel.className = "stage-flag";
+      const wonCheckbox = document.createElement("input");
+      wonCheckbox.type = "checkbox";
+      wonCheckbox.checked = !!s.is_won;
+      wonCheckbox.addEventListener("change", function () {
+        savePipelineStage(s.id, { is_won: wonCheckbox.checked });
+      });
+      wonLabel.appendChild(wonCheckbox);
+      wonLabel.appendChild(document.createTextNode(" Won"));
+      row.appendChild(wonLabel);
+
+      const lostLabel = document.createElement("label");
+      lostLabel.className = "stage-flag";
+      const lostCheckbox = document.createElement("input");
+      lostCheckbox.type = "checkbox";
+      lostCheckbox.checked = !!s.is_lost;
+      lostCheckbox.addEventListener("change", function () {
+        savePipelineStage(s.id, { is_lost: lostCheckbox.checked });
+      });
+      lostLabel.appendChild(lostCheckbox);
+      lostLabel.appendChild(document.createTextNode(" Lost"));
+      row.appendChild(lostLabel);
+
+      const upBtn = document.createElement("button");
+      upBtn.className = "btn-secondary stage-reorder-btn";
+      upBtn.textContent = "↑";
+      upBtn.title = "Move up";
+      upBtn.disabled = index === 0;
+      upBtn.addEventListener("click", function () { movePipelineStageAndReload(s.id, "up"); });
+      row.appendChild(upBtn);
+
+      const downBtn = document.createElement("button");
+      downBtn.className = "btn-secondary stage-reorder-btn";
+      downBtn.textContent = "↓";
+      downBtn.title = "Move down";
+      downBtn.disabled = index === pipelineStagesCache.length - 1;
+      downBtn.addEventListener("click", function () { movePipelineStageAndReload(s.id, "down"); });
+      row.appendChild(downBtn);
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "btn-danger";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.addEventListener("click", function () { deletePipelineStageAndReload(s.id); });
+      row.appendChild(deleteBtn);
+
+      container.appendChild(row);
+    });
+  }
+
+  async function savePipelineStage(id, payload) {
+    const resp = await authFetch("/api/pipeline-stages/" + id, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const data = await resp.json().catch(function () { return null; });
+    if (!resp.ok) {
+      showPipelineConfigStatus("error", (data && data.error) || "Couldn't save that stage.");
+    }
+    await loadPipelineStages();
+  }
+
+  async function movePipelineStageAndReload(id, direction) {
+    const resp = await authFetch("/api/pipeline-stages/" + id + "/move", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ direction: direction })
+    });
+    const data = await resp.json().catch(function () { return null; });
+    if (!resp.ok) {
+      showPipelineConfigStatus("error", (data && data.error) || "Couldn't reorder that stage.");
+      return;
+    }
+    await loadPipelineStages();
+  }
+
+  async function deletePipelineStageAndReload(id) {
+    if (!confirm("Delete this pipeline stage? This can't be undone.")) return;
+    const resp = await authFetch("/api/pipeline-stages/" + id, { method: "DELETE" });
+    const data = await resp.json().catch(function () { return null; });
+    if (!resp.ok) {
+      showPipelineConfigStatus("error", (data && data.error) || "Couldn't delete that stage.");
+      return;
+    }
+    showPipelineConfigStatus("success", "Stage deleted.");
+    await loadPipelineStages();
+  }
+
+  document.getElementById("toggle-pipeline-config-btn").addEventListener("click", function () {
+    const panel = document.getElementById("pipeline-config-panel");
+    if (panel.style.display === "block") {
+      panel.style.display = "none";
+    } else {
+      panel.style.display = "block";
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  });
+
+  document.getElementById("add-stage-btn").addEventListener("click", async function () {
+    const name = document.getElementById("new-stage-name").value.trim();
+    if (!name) { showPipelineConfigStatus("error", "Give the stage a name first."); return; }
+    const color = document.getElementById("new-stage-color").value;
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/pipeline-stages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: name, color: color })
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        showPipelineConfigStatus("error", (data && data.error) || "Couldn't add that stage.");
+        return;
+      }
+      document.getElementById("new-stage-name").value = "";
+      document.getElementById("new-stage-color").value = "#3a4a60";
+      showPipelineConfigStatus("success", "Stage added.");
+      await loadPipelineStages();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ---- The board itself ----
+
+  async function loadLeads() {
+    const search = document.getElementById("lead-search").value.trim();
+    const brandId = document.getElementById("lead-filter-brand").value;
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (brandId) params.set("brand_id", brandId);
+    const resp = await authFetch("/api/leads?" + params.toString());
+    const rows = await resp.json();
+    leadsCache = Array.isArray(rows) ? rows : [];
+    renderPipelineBoard();
+  }
+
+  function leadCardHtml(l) {
+    const metaParts = [];
+    if (l.organization && leadName(l)) metaParts.push(l.organization);
+    if (l.brand_name) metaParts.push(l.brand_name);
+    if (l.event_date) metaParts.push(l.event_date);
+    const assignee = ((l.assignee_first_name || "") + " " + (l.assignee_last_name || "")).trim();
+    if (assignee) metaParts.push(assignee);
+    const valueLine = l.estimated_value != null && l.estimated_value !== "" ? money(l.estimated_value) : "";
+
+    const stageOptions = pipelineStagesCache.map(function (s) {
+      return '<option value="' + s.id + '"' + (s.id === l.stage_id ? " selected" : "") + '>' + s.name + "</option>";
+    }).join("");
+
+    return (
+      '<div class="lead-card" data-id="' + l.id + '">' +
+        '<div class="lead-card-title">' + leadCardTitle(l) + "</div>" +
+        '<div class="lead-card-meta">' +
+          (metaParts.length ? "<div>" + metaParts.join(" -- ") + "</div>" : "") +
+          (valueLine ? "<div>" + valueLine + "</div>" : "") +
+        "</div>" +
+        '<select class="lead-stage-select" data-id="' + l.id + '">' + stageOptions + "</select>" +
+      "</div>"
+    );
+  }
+
+  function renderPipelineBoard() {
+    const board = document.getElementById("pipeline-board");
+    if (pipelineStagesCache.length === 0) {
+      board.innerHTML = dashEmptyRow("No pipeline stages configured yet.");
+      return;
+    }
+
+    const byStage = {};
+    leadsCache.forEach(function (l) {
+      if (!byStage[l.stage_id]) byStage[l.stage_id] = [];
+      byStage[l.stage_id].push(l);
+    });
+
+    board.innerHTML = pipelineStagesCache.map(function (s) {
+      const stageLeads = byStage[s.id] || [];
+      const cardsHtml = stageLeads.length ? stageLeads.map(leadCardHtml).join("") : dashEmptyRow("No leads here.");
+      return (
+        '<div class="pipeline-column" data-stage-id="' + s.id + '">' +
+          '<div class="pipeline-column-header">' +
+            '<span class="pipeline-column-dot" style="background:' + (s.color || "#3a4a60") + ';"></span>' +
+            '<span class="pipeline-column-title">' + s.name + "</span>" +
+            '<span class="pipeline-column-count">' + stageLeads.length + "</span>" +
+          "</div>" +
+          cardsHtml +
+        "</div>"
+      );
+    }).join("");
+
+    board.querySelectorAll(".lead-card").forEach(function (card) {
+      card.addEventListener("click", function (e) {
+        if (e.target.closest(".lead-stage-select")) return;
+        openLeadDetail(card.dataset.id);
+      });
+    });
+    board.querySelectorAll(".lead-stage-select").forEach(function (select) {
+      select.addEventListener("click", function (e) { e.stopPropagation(); });
+      select.addEventListener("change", async function () {
+        const resp = await authFetch("/api/leads/" + select.dataset.id, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ stage_id: Number(select.value) })
+        });
+        if (resp.ok) await loadLeads();
+      });
+    });
+  }
+
+  let leadSearchTimer = null;
+  document.getElementById("lead-search").addEventListener("input", function () {
+    clearTimeout(leadSearchTimer);
+    leadSearchTimer = setTimeout(loadLeads, 300);
+  });
+  document.getElementById("lead-filter-brand").addEventListener("change", loadLeads);
+
+  // Client typeahead for linking a new lead to an existing client -- same
+  // search-and-pick pattern used for the "New task" form's client search.
+  document.getElementById("lead-client-search").addEventListener("input", function () {
+    const q = this.value.trim();
+    document.getElementById("lead-client-id").value = "";
+    const resultsBox = document.getElementById("lead-client-results");
+    clearTimeout(this._searchTimer);
+    if (!q) {
+      resultsBox.style.display = "none";
+      resultsBox.innerHTML = "";
+      return;
+    }
+    const input = this;
+    this._searchTimer = setTimeout(async function () {
+      const resp = await authFetch("/api/customers?search=" + encodeURIComponent(q));
+      const rows = await resp.json();
+      if (!Array.isArray(rows) || rows.length === 0) {
+        resultsBox.style.display = "none";
+        resultsBox.innerHTML = "";
+        return;
+      }
+      resultsBox.innerHTML = rows.map(function (c) {
+        return (
+          '<div data-id="' + c.id + '" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:0.5px solid #eee6d6;">' +
+            (clientName(c) || c.email) + " -- " + (c.email || "") +
+          "</div>"
+        );
+      }).join("");
+      resultsBox.style.display = "block";
+      resultsBox.querySelectorAll("[data-id]").forEach(function (row) {
+        row.addEventListener("click", function () {
+          const c = rows.find(function (x) { return x.id === Number(row.dataset.id); });
+          if (!c) return;
+          document.getElementById("lead-client-id").value = c.id;
+          input.value = clientName(c) || c.email || "";
+          resultsBox.style.display = "none";
+          resultsBox.innerHTML = "";
+        });
+      });
+    }, 300);
+  });
+
+  function showAddLeadStatus(kind, message) {
+    const el = document.getElementById("add-lead-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  document.getElementById("toggle-add-lead-btn").addEventListener("click", function () {
+    const panel = document.getElementById("add-lead-panel");
+    if (panel.style.display === "block") {
+      panel.style.display = "none";
+    } else {
+      panel.style.display = "block";
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  });
+  document.getElementById("cancel-add-lead-btn").addEventListener("click", function () {
+    document.getElementById("add-lead-panel").style.display = "none";
+  });
+
+  document.getElementById("add-lead-btn").addEventListener("click", async function () {
+    const brandId = document.getElementById("lead-brand").value;
+    if (!brandId) { showAddLeadStatus("error", "Pick a brand first."); return; }
+    const firstName = document.getElementById("lead-first-name").value.trim();
+    const lastName = document.getElementById("lead-last-name").value.trim();
+    const email = document.getElementById("lead-email").value.trim();
+    const organization = document.getElementById("lead-organization").value.trim();
+    if (!firstName && !lastName && !organization && !email) {
+      showAddLeadStatus("error", "Give the lead a name, organization, or email.");
+      return;
+    }
+
+    const payload = {
+      brand_id: Number(brandId),
+      first_name: firstName || null,
+      last_name: lastName || null,
+      email: email || null,
+      phone: document.getElementById("lead-phone").value.trim() || null,
+      organization: organization || null,
+      event_date: document.getElementById("lead-event-date").value || null,
+      estimated_value: document.getElementById("lead-estimated-value").value || null,
+      source: document.getElementById("lead-source").value.trim() || null,
+      notes: document.getElementById("lead-notes").value.trim() || null
+    };
+    const clientId = document.getElementById("lead-client-id").value;
+    if (clientId) payload.customer_id = Number(clientId);
+    if (canAssignTasks) {
+      const assignee = document.getElementById("lead-assignee").value;
+      if (assignee) payload.assigned_to = Number(assignee);
+    }
+
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/leads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        showAddLeadStatus("error", (data && data.error) || "Couldn't add that lead.");
+        return;
+      }
+      document.getElementById("add-lead-panel").style.display = "none";
+      ["lead-first-name", "lead-last-name", "lead-email", "lead-phone", "lead-organization", "lead-source", "lead-notes"].forEach(function (id) {
+        document.getElementById(id).value = "";
+      });
+      document.getElementById("lead-event-date").value = "";
+      document.getElementById("lead-estimated-value").value = "";
+      document.getElementById("lead-client-search").value = "";
+      document.getElementById("lead-client-id").value = "";
+      if (canAssignTasks) document.getElementById("lead-assignee").value = "";
+      document.getElementById("add-lead-status").className = "portal-status";
+      await loadLeads();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  // ---- Lead detail (view/edit/delete an existing lead) ----
+
+  function showLeadDetailStatus(kind, message) {
+    const el = document.getElementById("lead-detail-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  async function openLeadDetail(id) {
+    const resp = await authFetch("/api/leads/" + id);
+    const l = await resp.json();
+    if (!resp.ok) return;
+    openLeadId = l.id;
+
+    document.getElementById("lead-detail-title").textContent = leadCardTitle(l);
+    fillStageSelect("edit-lead-stage");
+    document.getElementById("edit-lead-stage").value = l.stage_id;
+    document.getElementById("edit-lead-brand").value = l.brand_id;
+    document.getElementById("edit-lead-first-name").value = l.first_name || "";
+    document.getElementById("edit-lead-last-name").value = l.last_name || "";
+    document.getElementById("edit-lead-email").value = l.email || "";
+    document.getElementById("edit-lead-phone").value = l.phone || "";
+    document.getElementById("edit-lead-organization").value = l.organization || "";
+    document.getElementById("edit-lead-event-date").value = l.event_date || "";
+    document.getElementById("edit-lead-estimated-value").value = l.estimated_value != null ? l.estimated_value : "";
+    document.getElementById("edit-lead-source").value = l.source || "";
+    document.getElementById("edit-lead-notes").value = l.notes || "";
+    if (canAssignTasks) {
+      fillAssigneeSelect("edit-lead-assignee", "Unassigned");
+      document.getElementById("edit-lead-assignee").value = l.assigned_to || "";
+    }
+
+    document.getElementById("lead-detail-status").className = "portal-status";
+    document.getElementById("lead-detail-panel").style.display = "block";
+    document.getElementById("lead-detail-panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  document.getElementById("close-lead-detail-btn").addEventListener("click", function () {
+    document.getElementById("lead-detail-panel").style.display = "none";
+    openLeadId = null;
+  });
+
+  document.getElementById("save-lead-btn").addEventListener("click", async function () {
+    if (!openLeadId) return;
+    const firstName = document.getElementById("edit-lead-first-name").value.trim();
+    const lastName = document.getElementById("edit-lead-last-name").value.trim();
+    const email = document.getElementById("edit-lead-email").value.trim();
+    const organization = document.getElementById("edit-lead-organization").value.trim();
+    if (!firstName && !lastName && !organization && !email) {
+      showLeadDetailStatus("error", "Give the lead a name, organization, or email.");
+      return;
+    }
+
+    const payload = {
+      brand_id: Number(document.getElementById("edit-lead-brand").value),
+      stage_id: Number(document.getElementById("edit-lead-stage").value),
+      first_name: firstName || null,
+      last_name: lastName || null,
+      email: email || null,
+      phone: document.getElementById("edit-lead-phone").value.trim() || null,
+      organization: organization || null,
+      event_date: document.getElementById("edit-lead-event-date").value || null,
+      estimated_value: document.getElementById("edit-lead-estimated-value").value || null,
+      source: document.getElementById("edit-lead-source").value.trim() || null,
+      notes: document.getElementById("edit-lead-notes").value.trim() || null
+    };
+    if (canAssignTasks) {
+      const assignee = document.getElementById("edit-lead-assignee").value;
+      payload.assigned_to = assignee ? Number(assignee) : null;
+    }
+
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/leads/" + openLeadId, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        showLeadDetailStatus("error", (data && data.error) || "Couldn't save that lead.");
+        return;
+      }
+      document.getElementById("lead-detail-panel").style.display = "none";
+      openLeadId = null;
+      await loadLeads();
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  document.getElementById("delete-lead-btn").addEventListener("click", async function () {
+    if (!openLeadId) return;
+    if (!confirm("Delete this lead? This can't be undone.")) return;
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/leads/" + openLeadId, { method: "DELETE" });
+      if (!resp.ok) {
+        const data = await resp.json().catch(function () { return null; });
+        showLeadDetailStatus("error", (data && data.error) || "Couldn't delete that lead.");
+        return;
+      }
+      document.getElementById("lead-detail-panel").style.display = "none";
+      openLeadId = null;
+      await loadLeads();
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   // -------------------------------------------------------------------
   // Equipment
@@ -2876,10 +3527,15 @@
     await safeLoad("equipment", loadEquipment);
     await safeLoad("packages", loadPackages);
     await safeLoad("venues", loadVenues);
-    if (canSeeVenuesClients) await safeLoad("clients", loadClients);
+    if (canSeeVenuesClients) {
+      await safeLoad("clients", loadClients);
+      await safeLoad("pipeline stages", loadPipelineStages);
+      await safeLoad("leads", loadLeads);
+    }
     if (canSeeStaff) {
       await safeLoad("staff", loadStaff);
       populateTaskAssignee(); // refresh now that staffCache is actually populated
+      populateLeadAssignee();
     }
   })();
 </script>
