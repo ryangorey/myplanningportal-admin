@@ -69,6 +69,12 @@
           <div class="full"><label>New task</label><input type="text" id="new-task-title" placeholder="Task title"></div>
           <div><label>Due date</label><input type="date" id="new-task-due"></div>
           <div id="new-task-assign-wrap" style="display:none;"><label>Assign to</label><select id="new-task-assignee"></select></div>
+          <div class="full" id="new-task-client-wrap" style="display:none;">
+            <label>Client (optional)</label>
+            <input type="text" id="new-task-client-search" placeholder="Type a name or email to link this task to a client...">
+            <input type="hidden" id="new-task-client-id" value="">
+            <div id="new-task-client-results" style="display:none;background:#fff;border:0.5px solid #d8d2c4;border-radius:6px;margin:-10px 0 14px;max-height:160px;overflow-y:auto;"></div>
+          </div>
         </div>
         <button class="btn-primary" id="add-task-btn" style="margin-bottom:18px;">Add task</button>
         <p class="dash-subhead">Upcoming</p>
@@ -477,10 +483,31 @@
         <div><label>Phone</label><input type="text" id="edit-client-phone"></div>
         <div class="full" id="client-bookings-list" style="font-size:13px;color:#6b6355;"></div>
       </div>
-      <div style="display:flex;gap:10px;">
+      <div style="display:flex;gap:10px;margin-bottom:20px;">
         <button class="btn-primary" id="save-client-btn">Save changes</button>
         <button class="btn-secondary" id="close-client-detail-btn">Close</button>
       </div>
+
+      <p class="dash-subhead">Assigned tasks</p>
+      <div id="client-tasks-list" class="dash-list" style="margin-bottom:20px;"></div>
+
+      <p class="dash-subhead">CRM &ndash; contact log</p>
+      <div id="client-contacts-list" class="dash-list" style="margin-bottom:14px;"></div>
+      <div id="add-contact-status" class="portal-status"></div>
+      <div class="form-grid">
+        <div>
+          <label>Contact type</label>
+          <select id="new-contact-type">
+            <option value="call">Call</option>
+            <option value="email">Email</option>
+            <option value="meeting">Meeting</option>
+            <option value="note">Note</option>
+          </select>
+        </div>
+        <div><label>When</label><input type="datetime-local" id="new-contact-when"></div>
+        <div class="full"><label>Notes</label><textarea id="new-contact-notes" placeholder="What was discussed..."></textarea></div>
+      </div>
+      <button class="btn-secondary" id="add-contact-btn">Log contact</button>
     </div>
 
     <div class="add-panel">
@@ -634,6 +661,9 @@
     }
     if (canAssignTasks) {
       document.getElementById("new-task-assign-wrap").style.display = "";
+    }
+    if (canSeeVenuesClients) {
+      document.getElementById("new-task-client-wrap").style.display = "";
     }
   }
   applyRoleVisibility();
@@ -873,7 +903,11 @@
 
   function taskRowHtml(t) {
     const isDone = t.status === "completed";
-    const meta = t.due_date ? "Due " + t.due_date : "No due date";
+    let meta = t.due_date ? "Due " + t.due_date : "No due date";
+    if (t.customer_first_name || t.customer_last_name || t.customer_email) {
+      const clientLabel = ((t.customer_first_name || "") + " " + (t.customer_last_name || "")).trim() || t.customer_email;
+      meta += " -- " + clientLabel;
+    }
     return (
       '<div class="dash-row' + (isDone ? " completed" : "") + '" data-task-id="' + t.id + '">' +
         '<label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;">' +
@@ -926,6 +960,52 @@
     renderDashTasks();
   }
 
+  // Client typeahead for the "New task" form -- same search-and-pick
+  // pattern as the new-booking form's client search, but it stores the
+  // picked client's id in a hidden field instead of autofilling contact
+  // fields. Only wired up for sales+ (the client-wrap is hidden otherwise).
+  if (canSeeVenuesClients) {
+    let newTaskClientSearchTimer = null;
+    document.getElementById("new-task-client-search").addEventListener("input", function () {
+      const q = this.value.trim();
+      document.getElementById("new-task-client-id").value = "";
+      const resultsBox = document.getElementById("new-task-client-results");
+      clearTimeout(newTaskClientSearchTimer);
+      if (!q) {
+        resultsBox.style.display = "none";
+        resultsBox.innerHTML = "";
+        return;
+      }
+      newTaskClientSearchTimer = setTimeout(async function () {
+        const resp = await authFetch("/api/customers?search=" + encodeURIComponent(q));
+        const rows = await resp.json();
+        if (!Array.isArray(rows) || rows.length === 0) {
+          resultsBox.style.display = "none";
+          resultsBox.innerHTML = "";
+          return;
+        }
+        resultsBox.innerHTML = rows.map(function (c) {
+          return (
+            '<div data-id="' + c.id + '" style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:0.5px solid #eee6d6;">' +
+              (clientName(c) || c.email) + " -- " + (c.email || "") +
+            "</div>"
+          );
+        }).join("");
+        resultsBox.style.display = "block";
+        resultsBox.querySelectorAll("[data-id]").forEach(function (row) {
+          row.addEventListener("click", function () {
+            const c = rows.find(function (x) { return x.id === Number(row.dataset.id); });
+            if (!c) return;
+            document.getElementById("new-task-client-id").value = c.id;
+            document.getElementById("new-task-client-search").value = clientName(c) || c.email || "";
+            resultsBox.style.display = "none";
+            resultsBox.innerHTML = "";
+          });
+        });
+      }, 300);
+    });
+  }
+
   document.getElementById("add-task-btn").addEventListener("click", async function () {
     const title = document.getElementById("new-task-title").value.trim();
     if (!title) { showDashTaskStatus("error", "Give the task a title first."); return; }
@@ -934,6 +1014,10 @@
     if (canAssignTasks) {
       const assignee = document.getElementById("new-task-assignee").value;
       if (assignee) payload.assigned_to = Number(assignee);
+    }
+    if (canSeeVenuesClients) {
+      const clientId = document.getElementById("new-task-client-id").value;
+      if (clientId) payload.customer_id = Number(clientId);
     }
 
     const btn = this;
@@ -953,6 +1037,10 @@
       document.getElementById("new-task-title").value = "";
       document.getElementById("new-task-due").value = "";
       if (canAssignTasks) document.getElementById("new-task-assignee").value = "";
+      if (canSeeVenuesClients) {
+        document.getElementById("new-task-client-search").value = "";
+        document.getElementById("new-task-client-id").value = "";
+      }
       // A task assigned to someone else won't show in MY list -- only
       // refresh here if it's still going to be mine.
       if (!payload.assigned_to) loadDashTasks();
@@ -987,8 +1075,8 @@
         ? '<img src="' + API_BASE_URL + b.logo_url + '" alt="' + b.display_name + ' logo">'
         : '<span>No logo yet</span>';
       const color = b.primary_color || "#0e1a2b";
-      const isCoreBrand = ["rgml", "grinbear", "myplanningportal"].includes(b.slug);
-      const deleteBtn = (isSuperAdmin && !isCoreBrand)
+      const isPrimaryBrand = b.slug === "rgml";
+      const deleteBtn = (isSuperAdmin && !isPrimaryBrand)
         ? '<button class="btn-danger" data-delete-brand="' + b.id + '">Delete brand</button>'
         : "";
       return (
@@ -1709,11 +1797,110 @@
 
     document.getElementById("client-detail").classList.add("open");
     document.getElementById("client-detail").scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+    await loadClientTasks(id);
+    await loadClientContacts(id);
   }
 
   document.getElementById("close-client-detail-btn").addEventListener("click", function () {
     document.getElementById("client-detail").classList.remove("open");
     openClientId = null;
+  });
+
+  // -------------------------------------------------------------------
+  // Client detail: assigned tasks (read-only summary -- managed from the
+  // Home dashboard's Tasks widget) and the CRM contact log.
+  // -------------------------------------------------------------------
+  async function loadClientTasks(customerId) {
+    const resp = await authFetch("/api/customers/" + customerId + "/tasks");
+    const rows = await resp.json();
+    const box = document.getElementById("client-tasks-list");
+    if (!Array.isArray(rows) || rows.length === 0) {
+      box.innerHTML = dashEmptyRow("No tasks tied to this client.");
+      return;
+    }
+    box.innerHTML = rows.map(function (t) {
+      const isDone = t.status === "completed";
+      const assignee = ((t.assignee_first_name || "") + " " + (t.assignee_last_name || "")).trim() || t.assignee_email || "Unassigned";
+      const meta = (t.due_date ? "Due " + t.due_date : "No due date") + " -- " + assignee;
+      return (
+        '<div class="dash-row' + (isDone ? " completed" : "") + '">' +
+          '<span class="dash-row-main">' +
+            '<span class="dash-row-title">' + t.title + "</span>" +
+            '<span class="dash-row-meta">' + meta + "</span>" +
+          "</span>" +
+          '<span class="status-pill ' + (isDone ? "completed" : "inquiry") + '">' + t.status + "</span>" +
+        "</div>"
+      );
+    }).join("");
+  }
+
+  function contactTypeLabel(type) {
+    return { call: "Call", email: "Email", meeting: "Meeting", note: "Note" }[type] || type;
+  }
+
+  async function loadClientContacts(customerId) {
+    const resp = await authFetch("/api/customers/" + customerId + "/contacts");
+    const rows = await resp.json();
+    const box = document.getElementById("client-contacts-list");
+    if (!Array.isArray(rows) || rows.length === 0) {
+      box.innerHTML = dashEmptyRow("No contact history yet.");
+      return;
+    }
+    box.innerHTML = rows.map(function (c) {
+      const staffName = ((c.staff_first_name || "") + " " + (c.staff_last_name || "")).trim() || "Staff";
+      const when = c.contacted_at ? c.contacted_at.replace("T", " ").slice(0, 16) : "";
+      return (
+        '<div class="dash-row" data-contact-id="' + c.id + '">' +
+          '<span class="dash-row-main">' +
+            '<span class="dash-row-title">' + contactTypeLabel(c.contact_type) + " -- " + when + "</span>" +
+            '<span class="dash-row-meta">' + (c.notes ? c.notes + " -- " : "") + "logged by " + staffName + "</span>" +
+          "</span>" +
+          '<div class="dash-row-actions"><button class="btn-danger" data-delete-contact="' + c.id + '">Delete</button></div>' +
+        "</div>"
+      );
+    }).join("");
+
+    box.querySelectorAll("[data-delete-contact]").forEach(function (btn) {
+      btn.addEventListener("click", async function () {
+        await authFetch("/api/client-contacts/" + btn.dataset.deleteContact, { method: "DELETE" });
+        loadClientContacts(customerId);
+      });
+    });
+  }
+
+  document.getElementById("add-contact-btn").addEventListener("click", async function () {
+    if (!openClientId) return;
+    const type = document.getElementById("new-contact-type").value;
+    const whenLocal = document.getElementById("new-contact-when").value;
+    const notes = document.getElementById("new-contact-notes").value.trim();
+    const statusEl = document.getElementById("add-contact-status");
+
+    const btn = this;
+    btn.disabled = true;
+    try {
+      const resp = await authFetch("/api/customers/" + openClientId + "/contacts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          contact_type: type,
+          notes: notes || null,
+          contacted_at: whenLocal ? new Date(whenLocal).toISOString() : null
+        })
+      });
+      const data = await resp.json().catch(function () { return null; });
+      if (!resp.ok) {
+        statusEl.textContent = (data && data.error) || "Couldn't log that contact.";
+        statusEl.className = "portal-status show error";
+        return;
+      }
+      statusEl.className = "portal-status";
+      document.getElementById("new-contact-when").value = "";
+      document.getElementById("new-contact-notes").value = "";
+      await loadClientContacts(openClientId);
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   document.getElementById("save-client-btn").addEventListener("click", async function () {
@@ -2328,20 +2515,42 @@
   // -------------------------------------------------------------------
   // Boot
   // -------------------------------------------------------------------
+  // Every step below is wrapped so one section throwing (a bad row of
+  // data, a not-yet-migrated table, anything) can't silently take down
+  // every section that comes after it in this list -- that's exactly what
+  // was happening to the Home dashboard widgets before: they were loaded
+  // last, so any earlier failure meant they never ran at all, and
+  // toggling one "on" just revealed a permanently-empty box since it had
+  // never actually been fetched.
+  async function safeLoad(label, fn) {
+    try {
+      await fn();
+    } catch (err) {
+      console.error("Couldn't load " + label + ":", err);
+    }
+  }
+
   (async function init() {
-    await loadBrands();
-    await loadAccount();
-    await loadBookings();
-    await loadCalendarBookings();
-    await loadEquipment();
-    await loadPackages();
-    await loadVenues();
-    if (canSeeVenuesClients) await loadClients();
-    if (canSeeStaff) await loadStaff();
+    await safeLoad("brands", loadBrands);
+    await safeLoad("account", loadAccount);
+
+    // Home is the landing tab -- get it populated first, before anything
+    // else below gets a chance to fail and block it.
     populateTaskAssignee();
-    await loadDashCalendar();
-    await loadDashBookings();
-    await loadDashTasks();
+    await safeLoad("dashboard calendar widget", loadDashCalendar);
+    await safeLoad("dashboard bookings widget", loadDashBookings);
+    await safeLoad("dashboard tasks widget", loadDashTasks);
+
+    await safeLoad("bookings", loadBookings);
+    await safeLoad("calendar tab", loadCalendarBookings);
+    await safeLoad("equipment", loadEquipment);
+    await safeLoad("packages", loadPackages);
+    await safeLoad("venues", loadVenues);
+    if (canSeeVenuesClients) await safeLoad("clients", loadClients);
+    if (canSeeStaff) {
+      await safeLoad("staff", loadStaff);
+      populateTaskAssignee(); // refresh now that staffCache is actually populated
+    }
   })();
 </script>
 
