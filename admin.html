@@ -1466,8 +1466,13 @@
       );
     }).join("");
 
+    // Clicking a row opens that booking's own page in a new tab instead of
+    // the in-page accordion panel -- same behavior as the Home dashboard's
+    // calendar widget, so you can have several bookings open side by side.
     tbody.querySelectorAll("tr[data-id]").forEach(function (tr) {
-      tr.addEventListener("click", function () { openBookingDetail(tr.dataset.id); });
+      tr.addEventListener("click", function () {
+        window.open("booking-detail.html?id=" + tr.dataset.id, "_blank");
+      });
     });
   }
 
