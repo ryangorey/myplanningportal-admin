@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Booking detail | myplanningportal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="admin-styles.css">
+</head>
+<body>
+
+<div class="admin-topbar" id="admin-topbar">
+  <img id="topbar-logo" src="https://raw.githubusercontent.com/ryangorey/RGMLlogo/102e74830a7fd89dca2451699469c742463da962/my_planning_portal_logo_dark_bg_small.png" alt="myplanningportal">
+  <div class="who">
+    <span id="who-name"></span>
+    <span class="role-badge" id="who-role"></span>
+    <button id="back-to-admin-btn">Back to admin</button>
+    <button id="logout-btn">Sign out</button>
+  </div>
+</div>
+
+<div class="admin-content" style="max-width:720px;">
+
+  <div id="load-error" class="portal-status" style="margin-bottom:16px;"></div>
+
+  <div id="booking-detail-content" style="display:none;">
+    <h1 id="detail-title" style="margin-bottom:2px;"></h1>
+    <p class="section-sub" id="detail-sub"></p>
+
+    <div id="save-status" class="portal-status"></div>
+
+    <div class="add-panel" style="margin-top:0;">
+      <h3>Customer</h3>
+      <p style="font-size:13px;color:#0e1a2b;margin:0 0 4px;" id="detail-customer-name"></p>
+      <p style="font-size:13px;color:#6b6355;margin:0;" id="detail-customer-contact"></p>
+    </div>
+
+    <div class="add-panel">
+      <h3>Booking details</h3>
+      <div class="form-grid">
+        <div>
+          <label>Status</label>
+          <select id="edit-status">
+            <option value="inquiry">Inquiry</option>
+            <option value="booked">Booked</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div>
+          <label>Event date</label>
+          <input type="date" id="edit-date">
+        </div>
+        <div>
+          <label>Package</label>
+          <select id="edit-package"><option value="">No package</option></select>
+        </div>
+        <div>
+          <label>Venue</label>
+          <select id="edit-venue"><option value="">No venue set</option></select>
+        </div>
+        <div>
+          <label>Package total ($)</label>
+          <input type="number" step="0.01" id="edit-total">
+        </div>
+        <div>
+          <label>Deposit paid ($)</label>
+          <input type="number" step="0.01" id="edit-deposit">
+        </div>
+        <div class="full">
+          <label>Notes</label>
+          <textarea id="edit-notes"></textarea>
+        </div>
+        <div class="full">
+          <label>Payment options offered to the customer</label>
+          <div style="display:flex;gap:16px;margin-bottom:14px;">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="edit-allow-full" style="width:auto;margin:0;"> Full balance
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="edit-allow-retainer" style="width:auto;margin:0;"> 50% retainer
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="edit-allow-custom" style="width:auto;margin:0;"> Custom amount
+            </label>
+          </div>
+        </div>
+        <div>
+          <label>Booth type (Grin + Bear Booth only)</label>
+          <select id="edit-booth-type">
+            <option value="">Not set</option>
+            <option value="social">Social Booth</option>
+            <option value="studio">Studio Booth</option>
+          </select>
+        </div>
+        <div></div>
+        <div class="full">
+          <label>Backdrop / template selection offered to the customer</label>
+          <div style="display:flex;gap:16px;margin-bottom:14px;">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="edit-allow-backdrop" style="width:auto;margin:0;"> Backdrop picker
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;">
+              <input type="checkbox" id="edit-allow-template" style="width:auto;margin:0;"> Template picker
+            </label>
+          </div>
+        </div>
+        <div class="full" id="detail-picks" style="font-size:13px;color:#3b5f2a;"></div>
+      </div>
+      <button class="btn-primary" id="save-booking-btn">Save changes</button>
+    </div>
+
+    <div class="add-panel" id="payments-card" style="display:none;">
+      <h3>Payment history</h3>
+      <div id="payments-list" style="font-size:13px;color:#6b6355;"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="admin-config.js"></script>
+<script>
+  function getSession() {
+    try {
+      const raw = localStorage.getItem("mpp_staff_session");
+      return raw ? JSON.parse(raw) : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function clearSessionAndRedirect() {
+    localStorage.removeItem("mpp_staff_session");
+    window.location.replace("/admin-login.html");
+  }
+
+  const session = getSession();
+  if (!session || !session.token) {
+    clearSessionAndRedirect();
+  }
+
+  async function authFetch(path, options) {
+    options = options || {};
+    options.headers = Object.assign({}, options.headers, {
+      authorization: "Bearer " + session.token
+    });
+    const resp = await fetch(API_BASE_URL + path, options);
+    if (resp.status === 401) {
+      clearSessionAndRedirect();
+      throw new Error("Session expired");
+    }
+    return resp;
+  }
+
+  const ROLE_RANK = { employee: 0, sales: 1, admin: 2, super_admin: 3 };
+  const ROLE_LABELS = { employee: "Employee", sales: "Sales Person", admin: "Admin", super_admin: "Super Admin" };
+  function roleAtLeast(role, min) { return (ROLE_RANK[role] ?? -1) >= (ROLE_RANK[min] ?? Infinity); }
+  function roleLabel(r) { return ROLE_LABELS[r] || r; }
+
+  const myRole = session.staff.role || "employee";
+  const canEditBookings = roleAtLeast(myRole, "sales");
+
+  document.getElementById("who-name").textContent =
+    (session.staff.first_name ? session.staff.first_name + " " : "") + (session.staff.last_name || session.staff.email);
+  document.getElementById("who-role").textContent = roleLabel(myRole);
+
+  document.getElementById("logout-btn").addEventListener("click", async function () {
+    await authFetch("/api/auth/logout", { method: "POST" }).catch(function () {});
+    clearSessionAndRedirect();
+  });
+  document.getElementById("back-to-admin-btn").addEventListener("click", function () {
+    window.location.href = "admin.html";
+  });
+
+  (async function applyTopbarBranding() {
+    try {
+      const resp = await fetch(API_BASE_URL + "/api/brands");
+      const brands = await resp.json();
+      const mpp = Array.isArray(brands) ? brands.find(function (b) { return b.slug === "myplanningportal"; }) : null;
+      if (!mpp) return;
+      if (mpp.logo_url) document.getElementById("topbar-logo").src = API_BASE_URL + mpp.logo_url;
+      if (mpp.primary_color) document.getElementById("admin-topbar").style.background = mpp.primary_color;
+    } catch (err) { /* keep the hardcoded defaults on any error */ }
+  })();
+
+  function money(n) {
+    return "$" + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function showLoadError(message) {
+    const el = document.getElementById("load-error");
+    el.textContent = message;
+    el.className = "portal-status show error";
+  }
+
+  function showSaveStatus(kind, message) {
+    const el = document.getElementById("save-status");
+    el.textContent = message;
+    el.className = "portal-status show " + kind;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const bookingId = params.get("id");
+
+  let packagesCache = [];
+  let bookingBrandSlug = null;
+
+  async function loadPackagesAndVenues() {
+    const [pkgResp, venueResp] = await Promise.all([
+      authFetch("/api/packages?include_inactive=1"),
+      authFetch("/api/venues?include_inactive=1")
+    ]);
+    packagesCache = await pkgResp.json().catch(function () { return []; });
+    const venues = await venueResp.json().catch(function () { return []; });
+
+    const pkgSelect = document.getElementById("edit-package");
+    (Array.isArray(packagesCache) ? packagesCache : []).forEach(function (p) {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = p.name + (p.is_active ? "" : " (inactive)");
+      pkgSelect.appendChild(opt);
+    });
+
+    const venueSelect = document.getElementById("edit-venue");
+    (Array.isArray(venues) ? venues : []).forEach(function (v) {
+      const opt = document.createElement("option");
+      opt.value = v.id;
+      opt.textContent = v.name + (v.is_active ? "" : " (inactive)");
+      venueSelect.appendChild(opt);
+    });
+  }
+
+  async function loadBooking() {
+    if (!bookingId) {
+      showLoadError("No booking id in the URL.");
+      return;
+    }
+
+    await loadPackagesAndVenues().catch(function () { /* dropdowns just come up empty-ish, not fatal */ });
+
+    const resp = await authFetch("/api/bookings/" + bookingId);
+    if (!resp.ok) {
+      showLoadError(resp.status === 404 ? "That booking doesn't exist." : "Couldn't load that booking.");
+      return;
+    }
+    const b = await resp.json();
+    bookingBrandSlug = b.brand_slug;
+
+    const customerName = ((b.customer_first_name || "") + " " + (b.customer_last_name || "")).trim() || "No name on file";
+    document.getElementById("detail-title").textContent = "#" + b.id + " -- " + (b.brand_name || "");
+    document.getElementById("detail-sub").textContent = (b.event_type || "Event") + " on " + b.event_date;
+    document.getElementById("detail-customer-name").textContent = customerName;
+    document.getElementById("detail-customer-contact").textContent =
+      [b.customer_email, b.customer_phone].filter(Boolean).join(" -- ") || "No contact info on file";
+
+    document.getElementById("edit-status").value = b.status;
+    document.getElementById("edit-date").value = b.event_date;
+    document.getElementById("edit-package").value = b.package_id || "";
+    document.getElementById("edit-venue").value = b.venue_id || "";
+    document.getElementById("edit-total").value = b.package_total || 0;
+    document.getElementById("edit-deposit").value = b.deposit_paid || 0;
+    document.getElementById("edit-notes").value = b.notes || "";
+    document.getElementById("edit-allow-full").checked = !!b.allow_full_payment;
+    document.getElementById("edit-allow-retainer").checked = !!b.allow_retainer_payment;
+    document.getElementById("edit-allow-custom").checked = !!b.allow_custom_payment;
+    document.getElementById("edit-booth-type").value = b.booth_type || "";
+    document.getElementById("edit-allow-backdrop").checked = !!b.allow_backdrop_selection;
+    document.getElementById("edit-allow-template").checked = !!b.allow_template_selection;
+
+    const picks = [];
+    if (b.backdrop_choice) picks.push("Backdrop picked: " + b.backdrop_choice);
+    if (b.template_choice) picks.push("Template picked: " + b.template_choice);
+    document.getElementById("detail-picks").textContent = picks.join(" -- ");
+
+    document.querySelectorAll("#booking-detail-content input, #booking-detail-content select, #booking-detail-content textarea")
+      .forEach(function (el) { el.disabled = !canEditBookings; });
+    document.getElementById("save-booking-btn").style.display = canEditBookings ? "" : "none";
+
+    if (Array.isArray(b.payments) && b.payments.length) {
+      document.getElementById("payments-card").style.display = "block";
+      document.getElementById("payments-list").innerHTML = b.payments.map(function (p) {
+        return "<div style='padding:6px 0;border-bottom:0.5px solid #eee6d6;'>" +
+          money(p.amount) + " -- " + p.status + " -- " + (p.created_at || "").replace("T", " ").slice(0, 16) +
+        "</div>";
+      }).join("");
+    }
+
+    document.getElementById("booking-detail-content").style.display = "block";
+  }
+
+  document.getElementById("edit-package").addEventListener("change", function () {
+    const pkgId = Number(this.value);
+    const pkg = packagesCache.find(function (p) { return p.id === pkgId; });
+    if (!pkg) return;
+    document.getElementById("edit-total").value = pkg.price || 0;
+    document.getElementById("edit-booth-type").value = pkg.booth_type || "";
+    document.getElementById("edit-allow-backdrop").checked = !!pkg.allow_backdrop_selection;
+    document.getElementById("edit-allow-template").checked = !!pkg.allow_template_selection;
+  });
+
+  document.getElementById("save-booking-btn").addEventListener("click", async function () {
+    if (!bookingId) return;
+    const btn = this;
+    btn.disabled = true;
+    btn.textContent = "Saving...";
+    try {
+      const resp = await authFetch("/api/bookings/" + bookingId, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          status: document.getElementById("edit-status").value,
+          event_date: document.getElementById("edit-date").value,
+          package_id: document.getElementById("edit-package").value ? Number(document.getElementById("edit-package").value) : null,
+          venue_id: document.getElementById("edit-venue").value ? Number(document.getElementById("edit-venue").value) : null,
+          package_total: Number(document.getElementById("edit-total").value) || 0,
+          deposit_paid: Number(document.getElementById("edit-deposit").value) || 0,
+          notes: document.getElementById("edit-notes").value,
+          allow_full_payment: document.getElementById("edit-allow-full").checked ? 1 : 0,
+          allow_retainer_payment: document.getElementById("edit-allow-retainer").checked ? 1 : 0,
+          allow_custom_payment: document.getElementById("edit-allow-custom").checked ? 1 : 0,
+          booth_type: document.getElementById("edit-booth-type").value || null,
+          allow_backdrop_selection: document.getElementById("edit-allow-backdrop").checked ? 1 : 0,
+          allow_template_selection: document.getElementById("edit-allow-template").checked ? 1 : 0
+        })
+      });
+      if (!resp.ok) {
+        const data = await resp.json().catch(function () { return null; });
+        showSaveStatus("error", (data && data.error) || "Couldn't save changes.");
+        return;
+      }
+      showSaveStatus("success", "Saved.");
+    } catch (err) {
+      // authFetch already redirects on 401; anything else just leaves the form as-is to retry.
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Save changes";
+    }
+  });
+
+  loadBooking().catch(function (err) {
+    console.error("Couldn't load booking:", err);
+    showLoadError("Something went wrong loading this booking.");
+  });
+</script>
+
+</body>
+</html>
