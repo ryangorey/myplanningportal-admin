@@ -16,6 +16,12 @@
   <div class="who">
     <span id="who-name"></span>
     <span class="role-badge" id="who-role"></span>
+    <div class="settings-dropdown" id="add-menu-wrap">
+      <button id="add-menu-toggle-btn" title="Add new">+</button>
+      <div class="dropdown-menu" id="add-menu">
+        <button class="dropdown-item" id="add-menu-new-booking">New booking</button>
+      </div>
+    </div>
     <div class="settings-dropdown">
       <button id="settings-toggle-btn">Settings <i class="ti" style="font-style:normal;">&#9662;</i></button>
       <div class="dropdown-menu" id="settings-menu">
@@ -219,7 +225,7 @@
       </div>
     </div>
 
-    <div class="add-panel">
+    <div class="add-panel" id="new-booking-panel" style="display:none;">
       <h3>New booking</h3>
       <div id="new-booking-status" class="portal-status"></div>
       <div class="form-grid">
@@ -269,7 +275,10 @@
           <textarea id="bk-notes" placeholder="optional"></textarea>
         </div>
       </div>
-      <button class="btn-primary" id="add-booking-btn">Create booking</button>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="add-booking-btn">Create booking</button>
+        <button class="btn-secondary" id="cancel-new-booking-btn">Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -303,15 +312,20 @@
 
   <!-- ============================== Equipment ============================== -->
   <div class="admin-panel" id="panel-equipment">
-    <h1>Equipment</h1>
-    <p class="section-sub">Every trackable item -- deactivating keeps history intact instead of deleting.</p>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h1>Equipment</h1>
+        <p class="section-sub">Every trackable item -- deactivating keeps history intact instead of deleting.</p>
+      </div>
+      <button class="btn-secondary" id="toggle-add-equipment-btn">+ Add equipment</button>
+    </div>
 
     <table class="admin-table">
       <thead><tr><th>Name</th><th>Category</th><th>Notes</th><th>Status</th><th></th></tr></thead>
       <tbody id="equipment-tbody"></tbody>
     </table>
 
-    <div class="add-panel">
+    <div class="add-panel" id="add-equipment-panel" style="display:none;">
       <h3>Add equipment</h3>
       <div class="form-grid">
         <div><label>Name</label><input type="text" id="eq-name" placeholder="e.g. Studio Booth #2"></div>
@@ -326,21 +340,29 @@
         </div>
         <div class="full"><label>Notes</label><input type="text" id="eq-notes" placeholder="optional"></div>
       </div>
-      <button class="btn-primary" id="add-equipment-btn">Add equipment</button>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="add-equipment-btn">Add equipment</button>
+        <button class="btn-secondary" id="cancel-add-equipment-btn">Cancel</button>
+      </div>
     </div>
   </div>
 
   <!-- ============================== Packages ============================== -->
   <div class="admin-panel" id="panel-packages">
-    <h1>Packages</h1>
-    <p class="section-sub">What's bookable and priced on each site.</p>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h1>Packages</h1>
+        <p class="section-sub">What's bookable and priced on each site.</p>
+      </div>
+      <button class="btn-secondary" id="toggle-add-package-btn">+ Add package</button>
+    </div>
 
     <table class="admin-table">
       <thead><tr><th>Brand</th><th>Name</th><th>Category</th><th>Price</th><th>Hours</th><th>Booth</th><th>Widgets</th><th>Status</th><th></th></tr></thead>
       <tbody id="packages-tbody"></tbody>
     </table>
 
-    <div class="add-panel">
+    <div class="add-panel" id="add-package-panel" style="display:none;">
       <h3 id="package-form-title">Add package</h3>
       <div class="form-grid">
         <div>
@@ -428,8 +450,13 @@
 
   <!-- ============================== Staff ============================== -->
   <div class="admin-panel" id="panel-staff">
-    <h1>Staff</h1>
-    <p class="section-sub">Everyone with access to this admin site.</p>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h1>Staff</h1>
+        <p class="section-sub">Everyone with access to this admin site.</p>
+      </div>
+      <button class="btn-secondary" id="toggle-add-staff-btn">+ Add staff</button>
+    </div>
 
     <div id="staff-status" class="portal-status"></div>
 
@@ -452,7 +479,7 @@
       <tbody id="staff-tbody"></tbody>
     </table>
 
-    <div class="add-panel">
+    <div class="add-panel" id="add-staff-panel" style="display:none;">
       <h3 id="staff-form-title">Add staff</h3>
       <div class="form-grid">
         <div><label>First name</label><input type="text" id="sf-first-name" placeholder="optional"></div>
@@ -473,8 +500,13 @@
 
   <!-- ============================== Clients ============================== -->
   <div class="admin-panel" id="panel-clients">
-    <h1>Clients</h1>
-    <p class="section-sub">Saved contact info you can reuse when starting a new booking.</p>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+      <div>
+        <h1>Clients</h1>
+        <p class="section-sub">Saved contact info you can reuse when starting a new booking.</p>
+      </div>
+      <button class="btn-secondary" id="toggle-add-client-btn">+ Add client</button>
+    </div>
 
     <div class="filter-bar">
       <div style="flex:1;">
@@ -524,7 +556,7 @@
       <button class="btn-secondary" id="add-contact-btn">Log contact</button>
     </div>
 
-    <div class="add-panel">
+    <div class="add-panel" id="add-client-panel" style="display:none;">
       <h3>Add client</h3>
       <div id="add-client-status" class="portal-status"></div>
       <div class="form-grid">
@@ -533,7 +565,10 @@
         <div><label>Email</label><input type="email" id="new-client-email"></div>
         <div><label>Phone</label><input type="text" id="new-client-phone" placeholder="optional"></div>
       </div>
-      <button class="btn-primary" id="add-client-btn">Add client</button>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-primary" id="add-client-btn">Add client</button>
+        <button class="btn-secondary" id="cancel-add-client-btn">Cancel</button>
+      </div>
     </div>
   </div>
 
@@ -662,16 +697,16 @@
       if (s) s.style.display = "none";
     }
     if (!canEditEquipment) {
-      const p = document.querySelector('#panel-equipment .add-panel');
-      if (p) p.style.display = "none";
+      document.getElementById("toggle-add-equipment-btn").style.display = "none";
     }
     if (!canEditPackages) {
-      const p = document.querySelector('#panel-packages .add-panel');
-      if (p) p.style.display = "none";
+      document.getElementById("toggle-add-package-btn").style.display = "none";
     }
     if (!canEditBookings) {
-      const p = document.querySelector('#panel-bookings .add-panel');
-      if (p) p.style.display = "none";
+      // Employees are view-only on bookings -- hide the whole + menu
+      // rather than just the form it opens, since there's nothing else in
+      // it right now.
+      document.getElementById("add-menu-wrap").style.display = "none";
     }
     if (canAssignTasks) {
       document.getElementById("new-task-assign-wrap").style.display = "";
@@ -708,7 +743,10 @@
     tab.addEventListener("click", function () { showPanel(tab.dataset.tab); });
   });
 
-  document.querySelectorAll(".dropdown-item").forEach(function (item) {
+  // Only wires up items that switch tabs (data-tab) -- other dropdown
+  // items, like "New booking" in the + menu, get their own specific
+  // handler elsewhere instead of this generic one.
+  document.querySelectorAll(".dropdown-item[data-tab]").forEach(function (item) {
     item.addEventListener("click", function () {
       showPanel(item.dataset.tab);
       document.getElementById("settings-menu").classList.remove("open");
@@ -719,8 +757,28 @@
     e.stopPropagation();
     document.getElementById("settings-menu").classList.toggle("open");
   });
+
+  document.getElementById("add-menu-toggle-btn").addEventListener("click", function (e) {
+    e.stopPropagation();
+    document.getElementById("add-menu").classList.toggle("open");
+  });
+
+  function openNewBookingForm() {
+    document.getElementById("add-menu").classList.remove("open");
+    showPanel("bookings");
+    const panel = document.getElementById("new-booking-panel");
+    panel.style.display = "block";
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+  document.getElementById("add-menu-new-booking").addEventListener("click", openNewBookingForm);
+
+  document.getElementById("cancel-new-booking-btn").addEventListener("click", function () {
+    document.getElementById("new-booking-panel").style.display = "none";
+  });
+
   document.addEventListener("click", function () {
     document.getElementById("settings-menu").classList.remove("open");
+    document.getElementById("add-menu").classList.remove("open");
   });
 
   // -------------------------------------------------------------------
@@ -1826,6 +1884,19 @@
     loadEquipment();
   });
 
+  document.getElementById("toggle-add-equipment-btn").addEventListener("click", function () {
+    const panel = document.getElementById("add-equipment-panel");
+    if (panel.style.display === "block") {
+      panel.style.display = "none";
+    } else {
+      panel.style.display = "block";
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  });
+  document.getElementById("cancel-add-equipment-btn").addEventListener("click", function () {
+    document.getElementById("add-equipment-panel").style.display = "none";
+  });
+
   // -------------------------------------------------------------------
   // Clients
   // -------------------------------------------------------------------
@@ -2030,6 +2101,19 @@
     }
   });
 
+  document.getElementById("toggle-add-client-btn").addEventListener("click", function () {
+    const panel = document.getElementById("add-client-panel");
+    if (panel.style.display === "block") {
+      panel.style.display = "none";
+    } else {
+      panel.style.display = "block";
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  });
+  document.getElementById("cancel-add-client-btn").addEventListener("click", function () {
+    document.getElementById("add-client-panel").style.display = "none";
+  });
+
   document.getElementById("add-client-btn").addEventListener("click", async function () {
     const email = document.getElementById("new-client-email").value.trim();
     if (!email) {
@@ -2203,6 +2287,7 @@
         document.getElementById("pk-allow-template").checked = !!p.allow_template_selection;
         document.getElementById("add-package-btn").textContent = "Save package";
         document.getElementById("cancel-package-edit-btn").style.display = "inline-block";
+        document.getElementById("add-package-panel").style.display = "block";
         document.getElementById("package-form-title").scrollIntoView({ behavior: "smooth", block: "nearest" });
       });
     });
@@ -2224,7 +2309,19 @@
     document.getElementById("cancel-package-edit-btn").style.display = "none";
   }
 
-  document.getElementById("cancel-package-edit-btn").addEventListener("click", resetPackageForm);
+  document.getElementById("cancel-package-edit-btn").addEventListener("click", function () {
+    resetPackageForm();
+    document.getElementById("add-package-panel").style.display = "none";
+  });
+  document.getElementById("toggle-add-package-btn").addEventListener("click", function () {
+    const panel = document.getElementById("add-package-panel");
+    if (panel.style.display === "block") {
+      panel.style.display = "none";
+    } else {
+      panel.style.display = "block";
+      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  });
 
   document.getElementById("add-package-btn").addEventListener("click", async function () {
     const name = document.getElementById("pk-name").value.trim();
@@ -2532,6 +2629,7 @@
         document.getElementById("sf-password-label").textContent = "New password (optional)";
         document.getElementById("add-staff-btn").textContent = "Save staff";
         document.getElementById("cancel-staff-edit-btn").style.display = "inline-block";
+        document.getElementById("add-staff-panel").style.display = "block";
         document.getElementById("staff-form-title").scrollIntoView({ behavior: "smooth", block: "nearest" });
       });
     });
@@ -2552,7 +2650,19 @@
   }
 
   if (canSeeStaff) {
-    document.getElementById("cancel-staff-edit-btn").addEventListener("click", resetStaffForm);
+    document.getElementById("cancel-staff-edit-btn").addEventListener("click", function () {
+      resetStaffForm();
+      document.getElementById("add-staff-panel").style.display = "none";
+    });
+    document.getElementById("toggle-add-staff-btn").addEventListener("click", function () {
+      const panel = document.getElementById("add-staff-panel");
+      if (panel.style.display === "block") {
+        panel.style.display = "none";
+      } else {
+        panel.style.display = "block";
+        panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    });
     document.getElementById("staff-search").addEventListener("input", renderStaffTable);
     document.getElementById("staff-hide-inactive").addEventListener("change", renderStaffTable);
 
