@@ -552,9 +552,8 @@ textarea {
 
 .pipeline-board {
   display: flex;
+  flex-direction: column;
   gap: 14px;
-  overflow-x: auto;
-  padding-bottom: 10px;
   margin-top: 20px;
 }
 
@@ -562,10 +561,8 @@ textarea {
   background: #faf7f0;
   border: 0.5px solid #e3ddcf;
   border-radius: 10px;
-  min-width: 260px;
-  max-width: 260px;
-  flex: 0 0 auto;
-  padding: 12px;
+  width: 100%;
+  padding: 12px 14px 14px;
 }
 
 .pipeline-column-header {
@@ -575,6 +572,17 @@ textarea {
   margin-bottom: 10px;
   padding-bottom: 8px;
   border-bottom: 0.5px solid #e3ddcf;
+}
+
+.pipeline-column-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.pipeline-column-cards .empty-state,
+.pipeline-column-cards .dash-empty-row {
+  grid-column: 1 / -1;
 }
 
 .pipeline-column-dot {
@@ -604,7 +612,6 @@ textarea {
   border: 0.5px solid #e3ddcf;
   border-radius: 8px;
   padding: 10px 12px;
-  margin-bottom: 8px;
   cursor: pointer;
 }
 .lead-card:hover { border-color: #bb9159; }
